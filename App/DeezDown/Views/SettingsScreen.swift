@@ -24,6 +24,7 @@ struct SettingsScreen: View {
             }
         }
         .frame(width: 560, height: 460)
+        .tint(.brand)
         .onChange(of: model.settings) { _, _ in model.saveSettings() }
     }
 }

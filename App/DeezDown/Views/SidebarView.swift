@@ -15,6 +15,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .tint(.brand)
         .onChange(of: section) { _, _ in path = NavigationPath() }
         .safeAreaInset(edge: .bottom) { account }
     }

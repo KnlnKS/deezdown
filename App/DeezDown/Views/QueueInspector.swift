@@ -7,6 +7,8 @@ struct QueueInspector: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            header
+            Divider()
             if model.queue.isEmpty {
                 ContentUnavailableView {
                     Label("Nothing Queued", systemImage: "arrow.down.circle")
@@ -25,30 +27,40 @@ struct QueueInspector: View {
                 }
             }
         }
-        .navigationTitle("Downloads")
-        .toolbar {
-            ToolbarItem {
-                Button { model.revealDownloads() } label: {
-                    Label("Open Downloads Folder", systemImage: "folder")
-                }
-                .help("Open the downloads folder")
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .sheet(item: $issuesFor) { item in IssuesSheet(item: item) }
+    }
+
+    /// Lives in the panel rather than the window toolbar so the controls disappear with it.
+    private var header: some View {
+        HStack(spacing: 6) {
+            Text("Downloads")
+                .font(.headline)
+            if model.activeDownloads > 0 {
+                Text("\(model.activeDownloads)")
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Color.brandSoft, in: Capsule())
+                    .foregroundStyle(.brand)
             }
-            ToolbarItem {
-                Button { model.clearFinished() } label: {
-                    Label("Clear Finished", systemImage: "checklist.checked")
-                }
+            Spacer(minLength: 0)
+            Button { model.revealDownloads() } label: { Image(systemName: "folder") }
+                .help("Open the downloads folder")
+                .accessibilityLabel("Open the downloads folder")
+            Button { model.clearFinished() } label: { Image(systemName: "checklist.checked") }
                 .disabled(!model.queue.contains { $0.status == .completed })
                 .help("Clear finished downloads")
-            }
-            ToolbarItem {
-                Button(role: .destructive) { model.cancelAll() } label: {
-                    Label("Cancel All", systemImage: "xmark.circle")
-                }
+                .accessibilityLabel("Clear finished downloads")
+            Button { model.cancelAll() } label: { Image(systemName: "xmark.circle") }
                 .disabled(model.activeDownloads == 0)
                 .help("Cancel everything in the queue")
-            }
+                .accessibilityLabel("Cancel everything in the queue")
         }
-        .sheet(item: $issuesFor) { item in IssuesSheet(item: item) }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(.bar)
     }
 }
 

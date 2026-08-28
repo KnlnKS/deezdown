@@ -62,6 +62,16 @@ public enum DeezerLink: Sendable, Equatable, Hashable, Codable {
         }
     }
 
+    public var placeholderTitle: String {
+        switch self {
+        case .track: "Track"
+        case .album: "Album"
+        case .playlist: "Playlist"
+        case .artistTop: "Top Tracks"
+        case .artist(_, let tab): tab.title
+        }
+    }
+
     public var webURL: URL? {
         switch self {
         case .track(let id): URL(string: "https://www.deezer.com/track/\(id)")

@@ -113,7 +113,12 @@ public actor DownloadEngine {
     /// Artist links become one queue entry per album, resolved cheaply from the discography.
     private func expand(_ link: DeezerLink) async throws -> [PendingLink] {
         guard case .artist(let id, let tab) = link else {
-            return [PendingLink(link: link, title: "Loading…", subtitle: "", cover: Artwork(md5: "", kind: .cover), trackCount: 0)]
+            return [
+                PendingLink(
+                    link: link, title: link.placeholderTitle, subtitle: "Looking up tracks…",
+                    cover: Artwork(md5: "", kind: .cover), trackCount: 0
+                )
+            ]
         }
         let resolver = LinkResolver(session: session, settings: settings)
         let collections = try await resolver.resolve(.artist(id, tab: tab))

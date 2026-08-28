@@ -28,6 +28,9 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showAddLink)) { _ in
             showAddLink = model.isSignedIn
         }
+        .onChange(of: model.queue.count) { previous, current in
+            if current > previous { queueVisible = true }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             guard model.isSignedIn else { return }
             section = .search
