@@ -70,3 +70,115 @@ struct LiveDownload {
         #expect(seconds < 5)
     }
 }
+
+private func ffprobeTags(_ url: URL) throws -> [String: String] {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffprobe")
+    process.arguments = [
+        "-v", "error", "-show_entries", "format_tags", "-of", "default=nw=1",
+        url.path(percentEncoded: false),
+    ]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    try process.run()
+    let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+    process.waitUntilExit()
+    return output.split(separator: "\n").reduce(into: [:]) { result, line in
+        guard let split = line.firstIndex(of: "=") else { return }
+        let key = String(line[line.startIndex..<split]).replacingOccurrences(of: "TAG:", with: "")
+        result[key.lowercased()] = String(line[line.index(after: split)...])
+    }
+}
+
+@Suite(.enabled(if: liveARL != nil, "set DEEZDOWN_TEST_ARL to run live Deezer tests"), .serialized)
+struct LiveTagging {
+    let session = DeezerSession()
+
+    @Test(arguments: [TrackFormat.flac, .mp3_320])
+    func `a tagged file keeps decoding and carries its metadata and cover`(format: TrackFormat) async throws {
+        try await session.login(arl: #require(liveARL))
+
+        var settings = DownloadSettings()
+        settings.tags.lyrics = true
+        settings.tags.replayGain = true
+        settings.tags.trackTotal = true
+        settings.tags.discTotal = true
+        settings.tags.explicit = true
+        settings.tags.source = true
+
+        let gateway = try await session.trackData(id: "3135556")
+        var track = Track(gateway: gateway, album: Album(gateway: try await session.albumData(id: "302127")))
+        track.lyrics = Lyrics(results: try await session.lyrics(trackID: "3135556"))
+        track = track.applying(settings)
+
+        let resolver = MediaResolver(session: session, settings: settings)
+        let media = try (try await resolver.resolve([track], format: format))[0].get()
+
+        let destination = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appending(path: "deezdown-tagged.\(format.fileExtension)")
+        defer { try? FileManager.default.removeItem(at: destination) }
+        try await MediaDownloader().download(media, to: destination)
+
+        let artwork = await ArtworkStore().image(track.album.cover, size: 800, format: .jpeg(quality: 90))
+        #expect(artwork?.isEmpty == false)
+        try Tagger.tag(track, format: format, at: destination, artwork: artwork, settings: settings)
+
+        let errors = try ffmpegDecodes(destination)
+        #expect(errors.isEmpty, "ffmpeg reported: \(errors)")
+
+        let tags = try ffprobeTags(destination)
+        #expect(tags["title"] == "Harder, Better, Faster, Stronger")
+        #expect(tags["album"] == "Discovery")
+        #expect(tags["artist"]?.contains("Daft Punk") == true)
+        #expect(tags["date"]?.hasPrefix("2001") == true || tags["year"]?.hasPrefix("2001") == true)
+        #expect(tags["isrc"] == "GBDUW0000059" || tags["tsrc"] == "GBDUW0000059")
+        #expect(tags["publisher"] != nil || tags["label"] != nil)
+
+        let streams = try ffprobeStreams(destination)
+        #expect(streams.contains(format == .flac ? "flac" : "mp3"), "wrong codec: \(streams)")
+        #expect(streams.contains("mjpeg") || streams.contains("png"), "no embedded cover: \(streams)")
+    }
+}
+
+private func ffprobeStreams(_ url: URL) throws -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffprobe")
+    process.arguments = [
+        "-v", "error", "-show_entries", "stream=codec_name", "-of", "csv=p=0",
+        url.path(percentEncoded: false),
+    ]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    try process.run()
+    let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+    process.waitUntilExit()
+    return output
+}
+
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["DEEZDOWN_DUMP"] != nil), .serialized)
+struct TagDump {
+    @Test(arguments: [TrackFormat.flac, .mp3_320])
+    func `dump`(format: TrackFormat) async throws {
+        let session = DeezerSession()
+        try await session.login(arl: #require(liveARL))
+        var settings = DownloadSettings()
+        settings.tags.lyrics = true
+        settings.tags.replayGain = true
+        settings.tags.composer = true
+        settings.tags.involvedPeople = true
+        settings.tags.copyright = true
+        settings.tags.trackTotal = true
+        settings.tags.discTotal = true
+        var track = Track(gateway: try await session.trackData(id: "3135556"),
+                          album: Album(gateway: try await session.albumData(id: "302127")))
+        track.lyrics = Lyrics(results: try await session.lyrics(trackID: "3135556"))
+        track = track.applying(settings)
+        let resolver = MediaResolver(session: session, settings: settings)
+        let media = try (try await resolver.resolve([track], format: format))[0].get()
+        let out = URL(fileURLWithPath: "/tmp/deezdown-dump.\(format.fileExtension)")
+        try await MediaDownloader().download(media, to: out)
+        let art = await ArtworkStore().image(track.album.cover, size: 800, format: .jpeg(quality: 90))
+        try Tagger.tag(track, format: format, at: out, artwork: art, settings: settings)
+        print("WROTE \(out.path)")
+    }
+}

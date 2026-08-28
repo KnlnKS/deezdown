@@ -166,3 +166,53 @@ public enum SearchKind: String, Sendable, CaseIterable, Identifiable {
 public enum ProfileTab: String, Sendable, CaseIterable {
     case playlists, albums, artists, loved
 }
+
+extension DeezerSession {
+    /// Genres, UPC and record type only exist on the public API; one call covers a whole album.
+    public func enrichedAlbum(id: String) async throws -> Album {
+        let gateway = try await albumData(id: id)
+        let publicData = try? await publicAPI("album/\(id)")
+        return Album(gateway: gateway, publicData: publicData ?? .null)
+    }
+
+    /// BPM is per-track on the public API only, exactly as deemix fetches it.
+    public func publicTrackBPM(id: String) async -> Double? {
+        guard let results = try? await publicAPI("track/\(id)") else { return nil }
+        let bpm = results["bpm"].doubleValue ?? 0
+        return bpm > 0 ? bpm : nil
+    }
+
+    public func publicTrack(isrc: String) async throws -> JSONValue {
+        try await publicAPI("track/isrc:\(isrc)")
+    }
+
+    public func publicAlbum(upc: String) async throws -> JSONValue {
+        if let direct = try? await publicAPI("album/upc:\(upc)"), direct["id"] != .null { return direct }
+        let stripped = String(upc.drop { $0 == "0" })
+        return try await publicAPI("album/upc:\(stripped)")
+    }
+
+    /// deemix's search fallback: progressively loosen the query until Deezer matches something.
+    public func trackID(artist: String, title: String, album: String?) async -> String? {
+        var attempts: [String] = []
+        if let album, !album.isEmpty {
+            attempts.append("artist:\"\(artist)\" track:\"\(title)\" album:\"\(album)\"")
+        }
+        attempts.append("artist:\"\(artist)\" track:\"\(title)\"")
+        let stripped = title.replacingOccurrences(
+            of: #"\s*[\(\[].*?[\)\]]"#, with: "", options: .regularExpression
+        )
+        if stripped != title { attempts.append("artist:\"\(artist)\" track:\"\(stripped)\"") }
+        if let dash = title.range(of: " - ") {
+            attempts.append("artist:\"\(artist)\" track:\"\(title[title.startIndex..<dash.lowerBound])\"")
+        }
+
+        for query in attempts {
+            guard let results = try? await publicAPI("search", query: ["q": query, "limit": "1"]),
+                let id = results["data"][0]["id"].stringValue, id != "0"
+            else { continue }
+            return id
+        }
+        return nil
+    }
+}
