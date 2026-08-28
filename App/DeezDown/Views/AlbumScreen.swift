@@ -17,7 +17,7 @@ struct AlbumScreen: View {
                             switch row.kind {
                             case .disc(let number): DiscHeader(number: number).selectionDisabled()
                             case .track(let track, let index):
-                                TrackRow(track: track, index: index).tag(track.id)
+                                TrackRow(track: track, index: index, showsArtist: false).tag(track.id)
                             }
                         }
                     } header: {

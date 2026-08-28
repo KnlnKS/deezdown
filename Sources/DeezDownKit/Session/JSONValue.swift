@@ -119,3 +119,16 @@ extension JSONValue: ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, Ex
     public init(integerLiteral value: Int) { self = .int(value) }
     public init(booleanLiteral value: Bool) { self = .bool(value) }
 }
+
+extension JSONValue {
+    /// Overlays `other` on top of `self`, recursing into nested objects so a stored config
+    /// that predates a new setting keeps every value it does know about.
+    public func merging(_ other: JSONValue) -> JSONValue {
+        guard case .object(let base) = self, case .object(let overlay) = other else { return other }
+        var merged = base
+        for (key, value) in overlay {
+            merged[key] = base[key].map { $0.merging(value) } ?? value
+        }
+        return .object(merged)
+    }
+}

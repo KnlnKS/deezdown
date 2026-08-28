@@ -8,6 +8,7 @@ struct TrackRow: View {
     var index: Int?
     var showsArtwork = false
     var showsAlbum = false
+    var showsArtist = true
 
     @State private var hovering = false
 
@@ -29,7 +30,7 @@ struct TrackRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if !showsArtwork {
+            if !showsArtwork, showsArtist {
                 Text(track.artist)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

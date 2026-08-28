@@ -42,10 +42,12 @@ struct AddLinkSheet: View {
 
                 Spacer()
 
+                Text("⌘↩").font(.caption).foregroundStyle(.tertiary)
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                // The text editor swallows plain Return, so Command-Return is the way in.
                 Button("Add") { submit() }
                     .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
+                    .keyboardShortcut(.return, modifiers: .command)
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || working)
             }
         }

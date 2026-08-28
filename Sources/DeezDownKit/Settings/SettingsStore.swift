@@ -7,15 +7,18 @@ public struct SettingsStore: Sendable {
         self.paths = paths
     }
 
-    /// Never throws: a corrupt or partial config falls back to defaults rather than blocking launch.
+    /// Never throws, and never discards settings it does understand: the stored file is merged
+    /// onto the defaults key by key, so an old or partial config keeps working.
     public func load() -> DownloadSettings {
-        var settings: DownloadSettings
-        if let data = try? Data(contentsOf: paths.settingsFile),
-            let decoded = try? JSONDecoder().decode(DownloadSettings.self, from: data)
+        var settings = DownloadSettings()
+        if let stored = try? Data(contentsOf: paths.settingsFile),
+            let overlay = try? JSONDecoder().decode(JSONValue.self, from: stored),
+            let defaults = try? JSONEncoder().encode(settings),
+            let base = try? JSONDecoder().decode(JSONValue.self, from: defaults),
+            let merged = try? JSONEncoder().encode(base.merging(overlay)),
+            let decoded = try? JSONDecoder().decode(DownloadSettings.self, from: merged)
         {
             settings = decoded
-        } else {
-            settings = DownloadSettings()
         }
         settings.repair()
         return settings

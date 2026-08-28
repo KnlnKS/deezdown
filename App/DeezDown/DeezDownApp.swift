@@ -15,6 +15,10 @@ struct DeezDownApp: App {
         .defaultSize(width: 1160, height: 760)
         .windowToolbarStyle(.unified)
         .commands {
+            CommandGroup(after: .textEditing) {
+                Button("Find") { NotificationCenter.default.post(name: .focusSearch, object: nil) }
+                    .keyboardShortcut("f", modifiers: .command)
+            }
             SidebarCommands()
             InspectorCommands()
             DownloadCommands(model: model)
@@ -91,4 +95,5 @@ struct DownloadCommands: Commands {
 
 extension Notification.Name {
     static let showAddLink = Notification.Name("DeezDown.showAddLink")
+    static let focusSearch = Notification.Name("DeezDown.focusSearch")
 }

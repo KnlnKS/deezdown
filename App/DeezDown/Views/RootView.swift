@@ -8,6 +8,7 @@ struct RootView: View {
     @State private var path = NavigationPath()
     @State private var searchText = ""
     @State private var showAddLink = false
+    @FocusState private var searchFocused: Bool
     @SceneStorage("queueVisible") private var queueVisible = true
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
@@ -27,6 +28,11 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showAddLink)) { _ in
             showAddLink = model.isSignedIn
         }
+        .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
+            guard model.isSignedIn else { return }
+            section = .search
+            searchFocused = true
+        }
         .sheet(isPresented: $showAddLink) { AddLinkSheet() }
     }
 
@@ -45,13 +51,15 @@ struct RootView: View {
                         }
                     }
             }
-            .inspector(isPresented: $queueVisible) {
-                QueueInspector()
-                    .inspectorColumnWidth(min: 260, ideal: 300, max: 420)
-            }
-            .toolbar { toolbar }
         }
+        // Attached to the split view, not the stack, so drilling in keeps the queue on screen.
+        .inspector(isPresented: $queueVisible) {
+            QueueInspector()
+                .inspectorColumnWidth(min: 260, ideal: 300, max: 420)
+        }
+        .toolbar { toolbar }
         .searchable(text: $searchText, placement: .toolbar, prompt: "Artists, albums, tracks, or a Deezer link")
+        .searchFocused($searchFocused)
         .onSubmit(of: .search) { submitSearch() }
         .onChange(of: searchText) { _, value in
             if !value.isEmpty, section != .search { section = .search }
