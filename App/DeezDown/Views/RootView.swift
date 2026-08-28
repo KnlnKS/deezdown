@@ -5,7 +5,7 @@ struct RootView: View {
     @Environment(AppModel.self) private var model
 
     @State private var section: SidebarSection? = .home
-    @State private var path = NavigationPath()
+    @State private var navigator = Navigator()
     @State private var searchText = ""
     @State private var searchTab = SearchTab.all
     @State private var showAddLink = false
@@ -30,22 +30,22 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             guard model.isSignedIn else { return }
             section = .search
-            path = NavigationPath()
+            navigator.path = NavigationPath()
         }
         .onReceive(NotificationCenter.default.publisher(for: .showDownloads)) { _ in
             guard model.isSignedIn else { return }
             section = .downloads
-            path = NavigationPath()
+            navigator.path = NavigationPath()
         }
         .sheet(isPresented: $showAddLink) { AddLinkSheet() }
     }
 
     private var browser: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(section: $section, path: $path)
+            SidebarView(section: $section, path: $navigator.path)
                 .navigationSplitViewColumnWidth(min: 196, ideal: 216, max: 280)
         } detail: {
-            NavigationStack(path: $path) {
+            NavigationStack(path: $navigator.path) {
                 content
                     .navigationDestination(for: Route.self) { route in
                         switch route {
@@ -56,6 +56,7 @@ struct RootView: View {
                     }
             }
         }
+        .environment(navigator)
         .toolbar { toolbar }
     }
 

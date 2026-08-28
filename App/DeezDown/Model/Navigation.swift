@@ -29,6 +29,20 @@ enum SidebarSection: String, Hashable, CaseIterable, Identifiable {
     }
 }
 
+/// Owns the detail column's stack so a context menu, which can't hold a NavigationLink,
+/// can still push a destination.
+@Observable
+final class Navigator {
+    var path = NavigationPath()
+
+    func open(_ route: Route) { path.append(route) }
+}
+
+extension EnvironmentValues {
+    /// What the screen underneath is already showing.
+    @Entry var currentRoute: Route?
+}
+
 enum Route: Hashable {
     case album(String)
     case artist(String)

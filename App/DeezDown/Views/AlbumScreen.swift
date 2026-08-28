@@ -33,6 +33,7 @@ struct AlbumScreen: View {
             .animation(Motion.standard, value: selection.isEmpty)
         }
         .navigationTitle(title)
+        .environment(\.currentRoute, .album(id))
         .task(id: id) { await load() }
     }
 

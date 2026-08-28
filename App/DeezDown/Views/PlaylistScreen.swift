@@ -28,6 +28,7 @@ struct PlaylistScreen: View {
             .animation(Motion.standard, value: selection.isEmpty)
         }
         .navigationTitle(title)
+        .environment(\.currentRoute, .playlist(id))
         .task(id: id) { await load() }
     }
 

@@ -65,11 +65,19 @@ struct CardDownloadButton: View {
 
 struct DownloadContextMenu: ViewModifier {
     @Environment(AppModel.self) private var model
+    @Environment(Navigator.self) private var navigator: Navigator?
+    @Environment(\.currentRoute) private var currentRoute
     var link: DeezerLink
+    var track: TrackSummary?
 
     func body(content: Content) -> some View {
         content.contextMenu {
             Button("Download") { Task { await model.enqueue(link) } }
+            if let track {
+                Divider()
+                destination("Go to Artist", .artist(track.artistID))
+                destination("Go to Album", .album(track.albumID))
+            }
             Divider()
             if let url = link.webURL {
                 Button("Copy Deezer Link") {
@@ -80,11 +88,19 @@ struct DownloadContextMenu: ViewModifier {
             }
         }
     }
+
+    /// The page the row is already sitting on isn't offered as somewhere to go.
+    @ViewBuilder
+    private func destination(_ title: String, _ route: Route) -> some View {
+        if route != currentRoute, let navigator {
+            Button(title) { navigator.open(route) }
+        }
+    }
 }
 
 extension View {
-    func downloadContextMenu(_ link: DeezerLink) -> some View {
-        modifier(DownloadContextMenu(link: link))
+    func downloadContextMenu(_ link: DeezerLink, track: TrackSummary? = nil) -> some View {
+        modifier(DownloadContextMenu(link: link, track: track))
     }
 }
 

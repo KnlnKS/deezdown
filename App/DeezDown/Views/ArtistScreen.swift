@@ -60,6 +60,7 @@ struct ArtistScreen: View {
             }
         }
         .navigationTitle(title)
+        .environment(\.currentRoute, .artist(id))
         .task(id: id) { await load() }
     }
 

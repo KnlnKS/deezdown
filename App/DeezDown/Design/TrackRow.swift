@@ -56,7 +56,7 @@ struct TrackRow: View {
         .contentShape(.rect)
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: hovering)
-        .downloadContextMenu(track.link)
+        .downloadContextMenu(track.link, track: track)
     }
 
     /// Both states occupy the same fixed box, so hovering can't reflow the rows below.
