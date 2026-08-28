@@ -16,8 +16,16 @@ actor ArtworkLoader {
         session = URLSession(configuration: configuration)
     }
 
+    /// Deezer will render any square size, but each one is a separate download and a separate
+    /// cache entry. Snapping to a few steps lets a grid card and a detail header share one image.
+    private static let steps = [56, 120, 264, 500, 1000]
+
+    static func step(for size: Int) -> Int {
+        Artwork.clamped(steps.first { $0 >= size } ?? Artwork.maximumSize)
+    }
+
     func image(for picture: Artwork, size: Int) async -> NSImage? {
-        guard let url = picture.url(size: Artwork.clamped(size), format: .jpeg(quality: 80)) else { return nil }
+        guard let url = picture.url(size: Self.step(for: size), format: .jpeg(quality: 80)) else { return nil }
         if let cached = cache.object(forKey: url as NSURL) { return cached }
         if let running = inFlight[url] { return await running.value }
 
