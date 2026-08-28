@@ -185,14 +185,10 @@ private struct ArtworkSettings: View {
                 Toggle("Embed cover art in tags", isOn: $settings.tags.cover)
                 Stepper(
                     "Size: \(settings.embeddedArtworkSize) px", value: $settings.embeddedArtworkSize,
-                    in: 100...1800, step: 100
+                    in: 100...Artwork.maximumSize, step: 100
                 )
                 Toggle("Embed as PNG", isOn: $settings.embeddedArtworkPNG)
                 Toggle("UTF-8 cover description (iTunes fix)", isOn: $settings.tags.coverDescriptionUTF8)
-                if settings.embeddedArtworkSize > 1200 {
-                    Label("Deezer degrades artwork above 1200 px.", systemImage: "info.circle")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
             }
 
             Section("Saved alongside the music") {
@@ -211,12 +207,23 @@ private struct ArtworkSettings: View {
                 }
                 Stepper(
                     "Size: \(settings.localArtworkSize) px", value: $settings.localArtworkSize,
-                    in: 100...1800, step: 100
+                    in: 100...Artwork.maximumSize, step: 100
                 )
                 Stepper(
                     "JPEG quality: \(settings.jpegImageQuality)", value: $settings.jpegImageQuality,
                     in: 40...100, step: 5
                 )
+            }
+
+            Section {
+                Toggle("Show cover art on files in Finder", isOn: $settings.finderArtwork)
+            } footer: {
+                Text(
+                    """
+                    Finder reads embedded art from MP3 but not from FLAC, so the cover is                     attached as the file's icon instead.
+                    """
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
         }
     }

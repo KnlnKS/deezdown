@@ -48,5 +48,5 @@ enum Metrics {
     static let cardCorner: CGFloat = 12
     static let artworkCorner: CGFloat = 8
     static let rowHeight: CGFloat = 38
-    static let gutter: CGFloat = 20
+    static let gutter: CGFloat = 32
 }

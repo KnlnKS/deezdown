@@ -31,6 +31,7 @@ final class AppModel {
 
     let session = DeezerSession()
     let player = PreviewPlayer()
+    let cache = LibraryCache()
 
     private let paths = AppPaths()
     private let credentials: CredentialStore
@@ -81,6 +82,7 @@ final class AppModel {
         queueObserver = nil
         engine = nil
         queue = []
+        cache.invalidate()
         credentials.clear()
         Task { await session.logout() }
         signInState = .signedOut
@@ -149,6 +151,8 @@ final class AppModel {
         }
     }
 
+    func pause(_ id: String) { Task { await engine?.pause(id) } }
+    func resume(_ id: String) { Task { await engine?.resume(id) } }
     func cancel(_ id: String) { Task { await engine?.cancel(id) } }
     func remove(_ id: String) { Task { await engine?.remove(id) } }
     func retry(_ id: String) { Task { await engine?.retry(id) } }

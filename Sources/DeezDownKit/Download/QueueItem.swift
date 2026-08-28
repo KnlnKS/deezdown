@@ -1,7 +1,7 @@
 import Foundation
 
 public enum QueueStatus: String, Sendable, Codable, Equatable {
-    case queued, resolving, downloading, completed, withErrors, failed, canceled
+    case queued, resolving, downloading, paused, completed, withErrors, failed, canceled
 
     public var isFinished: Bool {
         [.completed, .withErrors, .failed, .canceled].contains(self)
@@ -9,6 +9,10 @@ public enum QueueStatus: String, Sendable, Codable, Equatable {
 
     public var isActive: Bool {
         self == .resolving || self == .downloading
+    }
+
+    public var canPause: Bool {
+        self == .queued || self == .resolving || self == .downloading
     }
 }
 
@@ -57,4 +61,6 @@ public struct QueueItem: Sendable, Codable, Equatable, Identifiable {
     }
 
     public var canRetry: Bool { status == .withErrors || status == .failed || status == .canceled }
+    public var canPause: Bool { status.canPause }
+    public var canResume: Bool { status == .paused }
 }

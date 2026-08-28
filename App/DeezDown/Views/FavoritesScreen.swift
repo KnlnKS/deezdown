@@ -23,11 +23,19 @@ struct FavoritesScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle("Favorites")
+        .toolbar {
+            ToolbarItem {
+                Button { Task { await load(force: true) } } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .help("Fetch the latest from Deezer")
+            }
+        }
         .task { await load() }
     }
 
     private var content: some View {
-        AsyncContent(state: state, retry: { Task { await load() } }) { results in
+        AsyncContent(state: state, retry: { Task { await load(force: true) } }) { results in
             Group {
                 switch tab {
                 case .playlists where results.playlists.isEmpty,
@@ -86,10 +94,16 @@ struct FavoritesScreen: View {
         }
     }
 
-    private func load() async {
-        state = .loading
+    private func load(force: Bool = false) async {
+        if !force, let cached = model.cache.value("favorites", as: SearchResults.self) {
+            state = .loaded(cached)
+            return
+        }
+        if case .loaded = state {} else { state = .loading }
         do {
-            state = .loaded(try await model.library.favorites())
+            let fresh = try await model.library.favorites()
+            model.cache.store(fresh, for: "favorites")
+            state = .loaded(fresh)
         } catch {
             state = .failed(model.message(for: error))
         }

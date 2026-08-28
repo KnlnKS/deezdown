@@ -58,7 +58,9 @@ struct DownloadsScreen: View {
     }
 
     private var subtitle: String {
-        let active = model.activeDownloads
+        let paused = model.queue.filter { $0.status == .paused }.count
+        if paused > 0, model.activeDownloads == paused { return "\(paused) paused" }
+        let active = model.activeDownloads - paused
         if active > 0 { return "\(active) in progress" }
         let tracks = model.queue.reduce(0) { $0 + $1.completedTracks }
         guard tracks > 0 else { return "" }
@@ -113,7 +115,7 @@ private struct DownloadRow: View {
             }
 
             actions
-                .frame(width: 56, alignment: .trailing)
+                .frame(width: 64, alignment: .trailing)
         }
         .padding(12)
         .background(Color.raised, in: RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous))
@@ -124,6 +126,8 @@ private struct DownloadRow: View {
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: hovering)
         .contextMenu {
+            if item.canPause { Button("Pause") { model.pause(item.id) } }
+            if item.canResume { Button("Resume") { model.resume(item.id) } }
             if item.canRetry { Button("Retry") { model.retry(item.id) } }
             if let destination = item.destination {
                 Button("Show in Finder") {
@@ -146,31 +150,50 @@ private struct DownloadRow: View {
 
     @ViewBuilder
     private var actions: some View {
-        HStack(spacing: 8) {
-            if item.canRetry {
+        HStack(spacing: 10) {
+            if item.canPause {
+                Button { model.pause(item.id) } label: { Image(systemName: "pause.fill") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Pause")
+                    .accessibilityLabel("Pause \(item.title)")
+            } else if item.canResume {
+                Button { model.resume(item.id) } label: { Image(systemName: "play.fill") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.brand)
+                    .help("Resume")
+                    .accessibilityLabel("Resume \(item.title)")
+            } else if item.canRetry {
                 Button { model.retry(item.id) } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
                     .help("Retry")
                     .accessibilityLabel("Retry \(item.title)")
             }
-            if item.status.isFinished {
-                Button { model.remove(item.id) } label: { Image(systemName: "xmark") }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .opacity(hovering ? 1 : 0)
-                    .help("Remove from the list")
-                    .accessibilityLabel("Remove \(item.title)")
-                Image(systemName: symbol)
-                    .foregroundStyle(tint)
-                    .opacity(hovering ? 0 : 1)
-                    .accessibilityHidden(true)
-            } else {
-                Button { model.cancel(item.id) } label: { Image(systemName: "xmark.circle.fill") }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .help("Cancel")
-                    .accessibilityLabel("Cancel \(item.title)")
+
+            // One slot: the outcome badge swaps to a remove button under the pointer,
+            // so nothing shifts as the row is hovered.
+            ZStack {
+                if item.status.isFinished {
+                    Image(systemName: symbol)
+                        .foregroundStyle(tint)
+                        .opacity(hovering ? 0 : 1)
+                        .accessibilityHidden(true)
+                    Button { model.remove(item.id) } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
+                        .opacity(hovering ? 1 : 0)
+                        .help("Remove from the list")
+                        .accessibilityLabel("Remove \(item.title)")
+                } else {
+                    Button { model.cancel(item.id) } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
+                        .help("Cancel")
+                        .accessibilityLabel("Cancel \(item.title)")
+                }
             }
+            .frame(width: 18)
         }
     }
 
@@ -197,6 +220,7 @@ private struct DownloadRow: View {
         case .failed: .failure
         case .withErrors: .warning
         case .completed: .success
+        case .paused: .secondary
         default: .brand
         }
     }
@@ -212,6 +236,8 @@ private struct DownloadRow: View {
         case .completed: "Done · \(item.totalTracks) track\(item.totalTracks == 1 ? "" : "s")"
         case .withErrors: "\(item.completedTracks) of \(item.totalTracks) downloaded"
         case .failed: "Failed"
+        case .paused: item.totalTracks > 0
+            ? "Paused · \(item.completedTracks + item.failedTracks) of \(item.totalTracks)" : "Paused"
         case .canceled: "Canceled"
         }
     }

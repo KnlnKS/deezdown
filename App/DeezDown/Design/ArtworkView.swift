@@ -79,3 +79,42 @@ struct CircularArtworkView: View {
         ArtworkView(picture: picture, side: side, corner: side / 2)
     }
 }
+
+/// Sizes itself from its container rather than a fixed side, so grid cards stay square
+/// without measuring geometry (which feeds back into the layout that produced it).
+struct FillingArtworkView: View {
+    var picture: Artwork
+    var isCircular = false
+
+    @State private var image: NSImage?
+
+    private var shape: AnyShape {
+        isCircular
+            ? AnyShape(Circle())
+            : AnyShape(RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous))
+    }
+
+    var body: some View {
+        shape
+            .fill(Color.sunken)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let image {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .transition(.opacity)
+                } else {
+                    Image(systemName: picture.kind == .artist ? "music.mic" : "music.note")
+                        .font(.system(size: 34, weight: .light))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .clipShape(shape)
+            .overlay { shape.stroke(Color.primary.opacity(0.06), lineWidth: 1) }
+            .animation(Motion.quick, value: image != nil)
+            .task(id: picture) {
+                image = await ArtworkLoader.shared.image(for: picture, size: 500)
+            }
+    }
+}

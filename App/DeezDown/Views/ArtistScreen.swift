@@ -15,14 +15,9 @@ struct ArtistScreen: View {
 
                 if !detail.topTracks.isEmpty {
                     SectionHeader("Top tracks") {
-                        DownloadMenu(link: .artistTop(id)) {
-                            Label("Download", systemImage: "arrow.down.circle")
+                        PillButton(title: "Download") {
+                            Task { await model.enqueue(.artistTop(id)) }
                         }
-                        .menuStyle(.button)
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.small)
-                        .fixedSize()
                     }
                     VStack(spacing: 0) {
                         ForEach(Array(detail.topTracks.prefix(10).enumerated()), id: \.element.id) { index, track in

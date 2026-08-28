@@ -31,6 +31,7 @@ public actor DownloadEngine {
     private var order: [String] = []
     private var states: [String: ItemState] = [:]
     private var jobs: [TrackJob] = []
+    private var heldJobs: [TrackJob] = []
     private var activeWorkers = 0
     private var directorRunning = false
     private var canceled: Set<String> = []
@@ -134,6 +135,7 @@ public actor DownloadEngine {
         guard var item = items[id] else { return }
         canceled.insert(id)
         jobs.removeAll { $0.itemID == id }
+        heldJobs.removeAll { $0.itemID == id }
         if !item.status.isFinished {
             item.status = .canceled
             items[id] = item
@@ -147,6 +149,7 @@ public actor DownloadEngine {
     public func cancelAll() {
         for id in order where !(items[id]?.status.isFinished ?? true) { canceled.insert(id) }
         jobs.removeAll()
+        heldJobs.removeAll()
         for id in order {
             guard var item = items[id], !item.status.isFinished else { continue }
             item.status = .canceled
@@ -160,6 +163,7 @@ public actor DownloadEngine {
     public func remove(_ id: String) {
         canceled.insert(id)
         jobs.removeAll { $0.itemID == id }
+        heldJobs.removeAll { $0.itemID == id }
         items[id] = nil
         states[id] = nil
         order.removeAll { $0 == id }
@@ -173,9 +177,35 @@ public actor DownloadEngine {
         for id in order where [.completed, .canceled].contains(items[id]?.status) { remove(id) }
     }
 
+    /// Pausing holds an item's remaining tracks aside; anything already in flight is allowed
+    /// to finish rather than throwing away a part-downloaded file.
+    public func pause(_ id: String) {
+        guard var item = items[id], item.canPause else { return }
+        heldJobs.append(contentsOf: jobs.filter { $0.itemID == id })
+        jobs.removeAll { $0.itemID == id }
+        item.status = .paused
+        items[id] = item
+        persist()
+        publish()
+    }
+
+    public func resume(_ id: String) {
+        guard var item = items[id], item.status == .paused else { return }
+        let released = heldJobs.filter { $0.itemID == id }
+        heldJobs.removeAll { $0.itemID == id }
+        jobs.append(contentsOf: released)
+        item.status = states[id] == nil && released.isEmpty ? .queued : .downloading
+        items[id] = item
+        persist()
+        publish()
+        pump()
+        Task { await finishIfDone(id) }
+    }
+
     public func retry(_ id: String) {
         guard var item = items[id], item.canRetry else { return }
         canceled.remove(id)
+        heldJobs.removeAll { $0.itemID == id }
         item.status = .queued
         item.completedTracks = 0
         item.failedTracks = 0
@@ -277,7 +307,7 @@ public actor DownloadEngine {
             item.subtitle = collection.subtitle
             item.cover = collection.cover
             item.totalTracks = tracks.count
-            item.status = .downloading
+            if item.status != .paused { item.status = .downloading }
             items[id] = item
 
             for (index, outcome) in resolvedMedia.enumerated() {
@@ -290,9 +320,9 @@ public actor DownloadEngine {
                             "\(tracks[index].mainArtist.name) - \(tracks[index].title) -> \(resolved.id)"
                         )
                     }
-                    jobs.append(TrackJob(itemID: id, index: index, media: media))
+                    enqueueJob(TrackJob(itemID: id, index: index, media: media))
                 case .failure(let failure):
-                    jobs.append(TrackJob(itemID: id, index: index, failure: failure))
+                    enqueueJob(TrackJob(itemID: id, index: index, failure: failure))
                 }
             }
             if tracks.isEmpty { await finish(id) }
@@ -309,6 +339,14 @@ public actor DownloadEngine {
         }
         persist()
         publish()
+    }
+
+    private func enqueueJob(_ job: TrackJob) {
+        if items[job.itemID]?.status == .paused {
+            heldJobs.append(job)
+        } else {
+            jobs.append(job)
+        }
     }
 
     private static func isoToday() -> String {
@@ -397,11 +435,14 @@ public actor DownloadEngine {
             enriched.lyrics = lyrics ?? enriched.lyrics
         }
 
+        let artwork = states[job.itemID]?.artwork
         do {
             try Tagger.tag(
-                enriched, format: media.format, at: file,
-                artwork: states[job.itemID]?.artwork, settings: settings
+                enriched, format: media.format, at: file, artwork: artwork, settings: settings
             )
+            if settings.finderArtwork, let artwork, FinderIcon.isNeeded(for: media.format) {
+                await FinderIcon.apply(artwork, to: file)
+            }
         } catch {
             states[job.itemID]?.failures.append("\(track.id) tagging: \(error.localizedDescription)")
         }
@@ -485,6 +526,7 @@ public actor DownloadEngine {
             await writeExtras(id: id, item: item, state: state)
         }
 
+        guard item.status != .paused else { return }
         item.status =
             item.failedTracks == 0
             ? .completed : (item.completedTracks == 0 ? .failed : .withErrors)

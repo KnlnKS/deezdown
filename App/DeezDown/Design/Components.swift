@@ -1,45 +1,17 @@
 import DeezDownKit
 import SwiftUI
 
-struct DownloadMenu<Label: View>: View {
-    @Environment(AppModel.self) private var model
-    var link: DeezerLink
-    @ViewBuilder var label: () -> Label
-
-    var body: some View {
-        Menu {
-            Button("Download") { Task { await model.enqueue(link) } }
-            Divider()
-            ForEach(TrackFormat.selectable, id: \.self) { format in
-                Button("Download \(format.displayName)") {
-                    Task { await model.enqueue(link, format: format) }
-                }
-                .disabled(model.user.map { !$0.canStream(format) } ?? true)
-            }
-            Divider()
-            if let url = link.webURL {
-                Button("Copy Deezer Link") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                }
-            }
-        } label: {
-            label()
-        } primaryAction: {
-            Task { await model.enqueue(link) }
-        }
-    }
-}
-
 struct DownloadButton: View {
+    @Environment(AppModel.self) private var model
     var link: DeezerLink
     var title = "Download"
 
     var body: some View {
-        DownloadMenu(link: link) {
+        Button {
+            Task { await model.enqueue(link) }
+        } label: {
             Label(title, systemImage: "arrow.down.circle.fill")
         }
-        .menuStyle(.button)
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .fixedSize()
@@ -47,18 +19,20 @@ struct DownloadButton: View {
 }
 
 struct DownloadIconButton: View {
+    @Environment(AppModel.self) private var model
     var link: DeezerLink
 
     var body: some View {
-        DownloadMenu(link: link) {
+        Button {
+            Task { await model.enqueue(link) }
+        } label: {
             Image(systemName: "arrow.down.circle")
                 .font(.body)
                 .contentShape(.rect)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
+        .buttonStyle(.plain)
         .help("Download")
+        .accessibilityLabel("Download")
     }
 }
 
@@ -69,12 +43,6 @@ struct DownloadContextMenu: ViewModifier {
     func body(content: Content) -> some View {
         content.contextMenu {
             Button("Download") { Task { await model.enqueue(link) } }
-            Menu("Download As") {
-                ForEach(TrackFormat.selectable, id: \.self) { format in
-                    Button(format.displayName) { Task { await model.enqueue(link, format: format) } }
-                        .disabled(model.user.map { !$0.canStream(format) } ?? true)
-                }
-            }
             Divider()
             if let url = link.webURL {
                 Button("Copy Deezer Link") {
@@ -137,14 +105,13 @@ struct MediaCard: View {
     var subtitle: String
     var link: DeezerLink
     var circular = false
-    var side: CGFloat = 156
 
     @State private var hovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .bottomTrailing) {
-                ArtworkView(picture: picture, side: side, corner: circular ? side / 2 : Metrics.cardCorner)
+                FillingArtworkView(picture: picture, isCircular: circular)
                 DownloadIconButton(link: link)
                     .font(.title2)
                     .padding(8)
@@ -152,12 +119,12 @@ struct MediaCard: View {
                     .scaleEffect(hovering ? 1 : 0.85)
                     .shadow(radius: 6, y: 2)
             }
+
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.subheadline.weight(.medium)).lineLimit(1)
                 Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
-            .frame(width: side, alignment: .leading)
-            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .contentShape(.rect)
         .onHover { hovering = $0 }

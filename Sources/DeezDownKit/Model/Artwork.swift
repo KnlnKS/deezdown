@@ -25,6 +25,9 @@ public struct Artwork: Sendable, Codable, Equatable, Hashable {
         self.kind = kind
     }
 
+    /// Deezer retired `e-cdns-images.dzcdn.net`; it now answers 403 for every request.
+    static let host = "https://cdn-images.dzcdn.net"
+
     public var isEmpty: Bool { md5.isEmpty }
 
     public func url(size: Int, format: ImageFormat) -> URL? {
@@ -34,9 +37,10 @@ public struct Artwork: Sendable, Codable, Equatable, Hashable {
             case .jpeg(let quality): "-000000-\(quality)-0-0.jpg"
             case .png: "-none-100-0-0.png"
             }
-        return URL(string: "https://e-cdns-images.dzcdn.net/images/\(kind.rawValue)/\(md5)/\(size)x\(size)\(suffix)")
+        return URL(string: "\(Artwork.host)/images/\(kind.rawValue)/\(md5)/\(size)x\(size)\(suffix)")
     }
 
     /// Deezer degrades above 1200px and answers larger requests with an error.
-    public static func clamped(_ size: Int) -> Int { min(size, 1200) }
+    public static let maximumSize = 1200
+    public static func clamped(_ size: Int) -> Int { min(size, maximumSize) }
 }

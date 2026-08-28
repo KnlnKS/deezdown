@@ -6,7 +6,7 @@ struct HomeScreen: View {
     @State private var state: LoadState<SearchResults> = .loading
 
     var body: some View {
-        AsyncContent(state: state, retry: { Task { await load() } }) { results in
+        AsyncContent(state: state, retry: { Task { await load(force: true) } }) { results in
             ScreenScroll {
                 greeting
                 if !results.albums.isEmpty {
@@ -36,6 +36,14 @@ struct HomeScreen: View {
             }
         }
         .navigationTitle("Home")
+        .toolbar {
+            ToolbarItem {
+                Button { Task { await load(force: true) } } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .help("Fetch the latest from Deezer")
+            }
+        }
         .task { await load() }
     }
 
@@ -50,10 +58,16 @@ struct HomeScreen: View {
         }
     }
 
-    private func load() async {
-        state = .loading
+    private func load(force: Bool = false) async {
+        if !force, let cached = model.cache.value("home", as: SearchResults.self) {
+            state = .loaded(cached)
+            return
+        }
+        if case .loaded = state {} else { state = .loading }
         do {
-            state = .loaded(try await model.library.charts())
+            let fresh = try await model.library.charts()
+            model.cache.store(fresh, for: "home")
+            state = .loaded(fresh)
         } catch {
             state = .failed(model.message(for: error))
         }

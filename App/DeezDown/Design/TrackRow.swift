@@ -51,13 +51,14 @@ struct TrackRow: View {
             DownloadIconButton(link: track.link)
                 .opacity(hovering ? 1 : 0.35)
         }
-        .padding(.vertical, 3)
+        .frame(height: showsArtwork ? 44 : 30)
         .contentShape(.rect)
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: hovering)
         .downloadContextMenu(track.link)
     }
 
+    /// Both states occupy the same fixed box, so hovering can't reflow the rows below.
     @ViewBuilder
     private var leading: some View {
         if showsArtwork {
@@ -68,15 +69,14 @@ struct TrackRow: View {
             .frame(width: 36, height: 36)
         } else {
             ZStack {
-                if hovering || isPlaying {
-                    previewOverlay(size: 24)
-                } else {
-                    Text(index.map(String.init) ?? "—")
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
+                Text(index.map(String.init) ?? "—")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .opacity(hovering || isPlaying ? 0 : 1)
+                previewOverlay(size: 24)
+                    .opacity(hovering || isPlaying ? 1 : 0)
             }
-            .frame(width: 28)
+            .frame(width: 28, height: 24)
         }
     }
 

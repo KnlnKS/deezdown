@@ -162,6 +162,7 @@ public struct DownloadSettings: Sendable, Codable, Equatable {
     public var localArtworkSize = 1200
     public var localArtworkFormat = "jpg"
     public var jpegImageQuality = 90
+    public var finderArtwork = true
 
     public var dateFormat = DateFormat.ymd
     public var albumVariousArtists = true
@@ -213,8 +214,9 @@ public struct DownloadSettings: Sendable, Codable, Equatable {
         queueConcurrency = max(1, min(queueConcurrency, 16))
         paddingSize = max(0, min(paddingSize, 8))
         jpegImageQuality = max(1, min(jpegImageQuality, 100))
-        embeddedArtworkSize = max(56, embeddedArtworkSize)
-        localArtworkSize = max(56, localArtworkSize)
+        // Deezer degrades artwork past 1200px, so that is the real ceiling.
+        embeddedArtworkSize = min(max(56, embeddedArtworkSize), Artwork.maximumSize)
+        localArtworkSize = min(max(56, localArtworkSize), Artwork.maximumSize)
         if localArtworkFormats.isEmpty { localArtworkFormat = defaults.localArtworkFormat }
     }
 }

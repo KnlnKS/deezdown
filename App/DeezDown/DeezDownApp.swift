@@ -21,7 +21,12 @@ struct DeezDownApp: App {
             }
             SidebarCommands()
             DownloadCommands(model: model)
-            CommandGroup(replacing: .newItem) {}
+            // Replacing New Item with an empty group makes SwiftUI treat the File menu as
+            // trivial and trap while pruning it, so it carries a real command instead.
+            CommandGroup(replacing: .newItem) {
+                Button("Add Link…") { NotificationCenter.default.post(name: .showAddLink, object: nil) }
+                    .keyboardShortcut("l", modifiers: .command)
+            }
             CommandGroup(replacing: .help) {
                 Link("Deezer", destination: URL(string: "https://www.deezer.com")!)
             }
@@ -39,9 +44,6 @@ struct DownloadCommands: Commands {
 
     var body: some Commands {
         CommandMenu("Downloads") {
-            Button("Add Link…") { NotificationCenter.default.post(name: .showAddLink, object: nil) }
-                .keyboardShortcut("l", modifiers: .command)
-
             // Plain paste belongs to text fields, so queueing a copied link gets its own shortcut.
             Button("Paste and Queue") {
                 guard let text = NSPasteboard.general.string(forType: .string) else { return }
