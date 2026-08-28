@@ -1,0 +1,41 @@
+name: DeezDown
+options:
+  bundleIdPrefix: com.deezdown
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+packages:
+  deezdown:
+    path: ..
+targets:
+  DeezDown:
+    type: application
+    platform: macOS
+    sources:
+      - path: DeezDown
+    dependencies:
+      - package: deezdown
+        product: DeezDownKit
+    info:
+      path: DeezDown/Info.plist
+      properties:
+        CFBundleDisplayName: DeezDown
+        LSApplicationCategoryType: public.app-category.music
+        LSMinimumSystemVersion: "26.0"
+        NSHumanReadableCopyright: ""
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.deezdown.DeezDown
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_STRICT_CONCURRENCY: complete
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: NO
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        DEVELOPMENT_ASSET_PATHS: ""
