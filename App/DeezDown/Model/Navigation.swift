@@ -2,7 +2,7 @@ import DeezDownKit
 import SwiftUI
 
 enum SidebarSection: String, Hashable, CaseIterable, Identifiable {
-    case home, search, favorites, charts, analyzer
+    case home, search, favorites, charts
 
     var id: String { rawValue }
 
@@ -12,7 +12,6 @@ enum SidebarSection: String, Hashable, CaseIterable, Identifiable {
         case .search: "Search"
         case .favorites: "Favorites"
         case .charts: "Charts"
-        case .analyzer: "Link Analyzer"
         }
     }
 
@@ -22,7 +21,6 @@ enum SidebarSection: String, Hashable, CaseIterable, Identifiable {
         case .search: "magnifyingglass"
         case .favorites: "heart"
         case .charts: "chart.bar"
-        case .analyzer: "link"
         }
     }
 }

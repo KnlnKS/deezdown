@@ -221,3 +221,80 @@ extension Int {
         return String(format: "%d:%02d", minutes, seconds)
     }
 }
+
+/// Deezer puts a pill next to each section heading; this is the Mac-weight version.
+struct PillButton: View {
+    var title: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(title, action: action)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .buttonBorderShape(.capsule)
+    }
+}
+
+/// Deezer sets release and artist names in a heavy condensed grotesque; SF's condensed
+/// width is the native equivalent and keeps long titles on one line.
+struct DisplayTitle: View {
+    var text: String
+    var size: CGFloat = 40
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: size, weight: .heavy))
+            .fontWidth(.condensed)
+            .tracking(-0.5)
+            .lineLimit(2)
+            .minimumScaleFactor(0.6)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+struct Eyebrow: View {
+    var text: String
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.caption2.weight(.bold))
+            .tracking(1)
+            .foregroundStyle(.brand)
+    }
+}
+
+/// Underlined tabs, the way Deezer separates an artist's discography sections.
+struct UnderlineTabs<Value: Hashable>: View {
+    @Binding var selection: Value
+    var options: [(value: Value, title: String)]
+
+    @Namespace private var underline
+
+    var body: some View {
+        HStack(spacing: 22) {
+            ForEach(options, id: \.value) { option in
+                Button {
+                    selection = option.value
+                } label: {
+                    Text(option.title)
+                        .font(.callout.weight(selection == option.value ? .semibold : .regular))
+                        .foregroundStyle(selection == option.value ? .primary : .secondary)
+                        .padding(.bottom, 8)
+                        // Overlaying keeps the rule exactly as wide as its label.
+                        .overlay(alignment: .bottom) {
+                            if selection == option.value {
+                                Capsule()
+                                    .fill(Color.brand)
+                                    .frame(height: 2)
+                                    .matchedGeometryEffect(id: "underline", in: underline)
+                            }
+                        }
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+        .animation(Motion.standard, value: selection)
+    }
+}

@@ -143,6 +143,7 @@ public struct SearchResults: Sendable, Equatable {
 public struct AlbumDetail: Sendable, Equatable {
     public var summary: AlbumSummary
     public var tracks: [TrackSummary]
+    public var artistPicture: String
     public var label: String
     public var genres: [String]
     public var releaseDate: String
@@ -163,10 +164,3 @@ public struct ArtistDetail: Sendable, Equatable {
     public var albums: [ArtistTab: [AlbumSummary]]
 }
 
-public struct TrackDetail: Sendable, Equatable {
-    public var summary: TrackSummary
-    public var isrc: String
-    public var bpm: Double
-    public var releaseDate: String
-    public var availableFormats: [TrackFormat]
-}

@@ -50,19 +50,13 @@ private struct PlaylistHeader: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 20) {
-            ArtworkView(picture: detail.summary.picture, side: 168, corner: Metrics.cardCorner)
-                .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
+            ArtworkView(picture: detail.summary.picture, side: 190, corner: Metrics.cardCorner)
+                .shadow(color: .black.opacity(0.28), radius: 22, y: 10)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("PLAYLIST")
-                    .font(.caption2.weight(.bold))
-                    .tracking(0.8)
-                    .foregroundStyle(.brand)
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: "Playlist")
 
-                Text(detail.summary.title)
-                    .font(.system(size: 30, weight: .bold))
-                    .tracking(-0.6)
-                    .lineLimit(2)
+                DisplayTitle(text: detail.summary.title)
 
                 if !detail.summary.description.isEmpty {
                     Text(detail.summary.description.strippingHTML)
@@ -74,10 +68,10 @@ private struct PlaylistHeader: View {
 
                 Text(metadata)
                     .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
 
                 DownloadButton(link: detail.summary.link, title: "Download Playlist")
-                    .padding(.top, 6)
+                    .padding(.top, 8)
             }
             Spacer(minLength: 0)
         }
@@ -91,6 +85,6 @@ private struct PlaylistHeader: View {
         if !detail.summary.owner.isEmpty { parts.append("By \(detail.summary.owner)") }
         parts.append("\(detail.tracks.count) track\(detail.tracks.count == 1 ? "" : "s")")
         parts.append(detail.duration.formattedDuration)
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " • ")
     }
 }

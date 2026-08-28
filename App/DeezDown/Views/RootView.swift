@@ -7,8 +7,8 @@ struct RootView: View {
     @State private var section: SidebarSection? = .home
     @State private var path = NavigationPath()
     @State private var searchText = ""
+    @State private var searchTab = SearchTab.all
     @State private var showAddLink = false
-    @FocusState private var searchFocused: Bool
     @SceneStorage("queueVisible") private var queueVisible = true
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
@@ -34,7 +34,7 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             guard model.isSignedIn else { return }
             section = .search
-            searchFocused = true
+            path = NavigationPath()
         }
         .sheet(isPresented: $showAddLink) { AddLinkSheet() }
     }
@@ -61,22 +61,15 @@ struct RootView: View {
                 .inspectorColumnWidth(min: 260, ideal: 300, max: 420)
         }
         .toolbar { toolbar }
-        .searchable(text: $searchText, placement: .toolbar, prompt: "Artists, albums, tracks, or a Deezer link")
-        .searchFocused($searchFocused)
-        .onSubmit(of: .search) { submitSearch() }
-        .onChange(of: searchText) { _, value in
-            if !value.isEmpty, section != .search { section = .search }
-        }
     }
 
     @ViewBuilder
     private var content: some View {
         switch section ?? .home {
         case .home: HomeScreen()
-        case .search: SearchScreen(query: searchText)
+        case .search: SearchScreen(query: $searchText, tab: $searchTab)
         case .favorites: FavoritesScreen()
         case .charts: ChartsScreen()
-        case .analyzer: LinkAnalyzerScreen()
         }
     }
 
@@ -114,17 +107,6 @@ struct RootView: View {
                     ? "Download queue, \(model.activeDownloads) active" : "Download queue"
             )
             .animation(Motion.quick, value: model.activeDownloads)
-        }
-    }
-
-    private func submitSearch() {
-        let text = searchText.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return }
-        if let link = try? LinkParser.parse(text) {
-            Task { await model.enqueue(link) }
-            searchText = ""
-        } else {
-            section = .search
         }
     }
 }

@@ -42,8 +42,9 @@ struct HomeScreen: View {
     private var greeting: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Welcome back\(model.user.map { ", \($0.name)" } ?? "")")
-                .font(.system(size: 26, weight: .semibold))
-                .tracking(-0.4)
+                .font(.system(size: 30, weight: .heavy))
+                .fontWidth(.condensed)
+                .tracking(-0.3)
             Text("Search for anything, or paste a Deezer link to download it.")
                 .foregroundStyle(.secondary)
         }

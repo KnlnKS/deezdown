@@ -14,24 +14,36 @@ struct ArtistScreen: View {
                 header(detail)
 
                 if !detail.topTracks.isEmpty {
-                    SectionHeader("Popular") {
+                    SectionHeader("Top tracks") {
                         DownloadMenu(link: .artistTop(id)) {
-                            Label("Download Top Tracks", systemImage: "arrow.down.circle")
+                            Label("Download", systemImage: "arrow.down.circle")
                         }
                         .menuStyle(.button)
                         .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
                         .fixedSize()
                     }
                     VStack(spacing: 0) {
                         ForEach(Array(detail.topTracks.prefix(10).enumerated()), id: \.element.id) { index, track in
                             TrackRow(track: track, index: index + 1, showsAlbum: true)
-                                .padding(.vertical, 2)
+                                .padding(.vertical, 3)
+                                .padding(.horizontal, 12)
+                                .hoverHighlight(corner: 6)
                         }
+                    }
+                    .padding(.vertical, 6)
+                    .background(Color.raised, in: RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.06))
                     }
                 }
 
+                UnderlineTabs(selection: $tab, options: availableTabs(detail))
+                    .padding(.top, 4)
+
                 if let albums = detail.albums[tab] ?? detail.albums[.all], !albums.isEmpty {
-                    SectionHeader("Discography") { tabPicker(detail) }
                     CardGrid(items: albums) { album in
                         NavigationLink(value: Route.album(album.id)) {
                             MediaCard(
@@ -65,35 +77,25 @@ struct ArtistScreen: View {
         [album.year, album.recordType.displayName].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
-    private func tabPicker(_ detail: ArtistDetail) -> some View {
-        Picker("Show", selection: $tab) {
-            ForEach(ArtistTab.allCases, id: \.self) { option in
-                if detail.albums[option]?.isEmpty == false {
-                    Text(option.title).tag(option)
-                }
-            }
-        }
-        .fixedSize()
+    private func availableTabs(_ detail: ArtistDetail) -> [(value: ArtistTab, title: String)] {
+        ArtistTab.allCases
+            .filter { detail.albums[$0]?.isEmpty == false }
+            .map { ($0, $0.title) }
     }
 
     private func header(_ detail: ArtistDetail) -> some View {
         HStack(alignment: .bottom, spacing: 20) {
-            CircularArtworkView(picture: detail.summary.picture, side: 152)
-                .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
+            CircularArtworkView(picture: detail.summary.picture, side: 190)
+                .shadow(color: .black.opacity(0.28), radius: 22, y: 10)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("ARTIST")
-                    .font(.caption2.weight(.bold))
-                    .tracking(0.8)
-                    .foregroundStyle(.brand)
-                Text(detail.summary.name)
-                    .font(.system(size: 32, weight: .bold))
-                    .tracking(-0.6)
-                Text("\(detail.summary.fans.formatted()) fans · \(detail.albums[.all]?.count ?? 0) releases")
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: "Artist")
+                DisplayTitle(text: detail.summary.name)
+                Text("\(detail.summary.fans.formatted()) fans • \(detail.albums[.all]?.count ?? 0) releases")
                     .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                 DownloadButton(link: .artist(id, tab: tab), title: "Download \(tab.title)")
-                    .padding(.top, 6)
+                    .padding(.top, 8)
             }
             Spacer(minLength: 0)
         }

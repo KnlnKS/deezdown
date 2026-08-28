@@ -64,35 +64,15 @@ public struct DeezerLibrary: Sendable {
         return AlbumDetail(
             summary: summary,
             tracks: tracks,
+            artistPicture: data["ARTISTS"].arrayValue
+                .first { $0["ART_ID"].stringValue == summary.artistID }?["ART_PICTURE"].stringValue
+                ?? data["ART_PICTURE"].stringValue ?? "",
             label: data["LABEL_NAME"].stringValue ?? publicData?["label"].stringValue ?? "",
             genres: publicData?["genres"]["data"].arrayValue.compactMap { $0["name"].stringValue } ?? [],
             releaseDate: data["ORIGINAL_RELEASE_DATE"].stringValue
                 ?? data["DIGITAL_RELEASE_DATE"].stringValue ?? "",
             duration: tracks.reduce(0) { $0 + $1.duration },
             discTotal: data["NUMBER_DISK"].intValue ?? 1
-        )
-    }
-
-    public func track(id rawID: String) async throws -> TrackDetail {
-        var id = rawID
-        if id.hasPrefix("isrc:") {
-            let results = try await session.publicTrack(isrc: String(id.dropFirst(5)))
-            guard let resolved = results["id"].stringValue, resolved != "0" else {
-                throw DownloadFailure(.notOnDeezer)
-            }
-            id = resolved
-        }
-        let gateway = try await session.trackData(id: id)
-        guard gateway["SNG_ID"].stringValue != nil else { throw DownloadFailure(.notOnDeezer) }
-        let publicData = try? await session.publicAPI("track/\(id)")
-
-        return TrackDetail(
-            summary: TrackSummary(gateway: gateway),
-            isrc: gateway["ISRC"].stringValue ?? "",
-            bpm: publicData?["bpm"].doubleValue ?? 0,
-            releaseDate: gateway["PHYSICAL_RELEASE_DATE"].stringValue
-                ?? gateway["DIGITAL_RELEASE_DATE"].stringValue ?? "",
-            availableFormats: TrackFormat.selectable.filter { (gateway[$0.filesizeKey].intValue ?? 0) > 0 }
         )
     }
 

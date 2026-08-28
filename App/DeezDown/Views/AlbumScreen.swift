@@ -75,35 +75,34 @@ private struct AlbumHeader: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 20) {
-            ArtworkView(picture: detail.summary.cover, side: 168, corner: Metrics.cardCorner)
-                .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
+            ArtworkView(picture: detail.summary.cover, side: 190, corner: Metrics.cardCorner)
+                .shadow(color: .black.opacity(0.28), radius: 22, y: 10)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(detail.summary.recordType.displayName.uppercased())
-                    .font(.caption2.weight(.bold))
-                    .tracking(0.8)
-                    .foregroundStyle(.brand)
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: detail.summary.recordType.displayName)
 
-                HStack(spacing: 8) {
-                    Text(detail.summary.title)
-                        .font(.system(size: 30, weight: .bold))
-                        .tracking(-0.6)
-                        .lineLimit(2)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    DisplayTitle(text: detail.summary.title)
                     if detail.summary.explicit { ExplicitBadge() }
                 }
 
                 NavigationLink(value: Route.artist(detail.summary.artistID)) {
-                    Text(detail.summary.artist).font(.title3.weight(.medium))
+                    HStack(spacing: 7) {
+                        CircularArtworkView(
+                            picture: Artwork(md5: detail.artistPicture, kind: .artist), side: 22
+                        )
+                        Text(detail.summary.artist).font(.title3.weight(.medium))
+                    }
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .hoverHighlight(corner: 6)
 
                 Text(metadata)
                     .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
 
                 DownloadButton(link: detail.summary.link, title: "Download Album")
-                    .padding(.top, 6)
+                    .padding(.top, 8)
             }
             Spacer(minLength: 0)
         }
@@ -119,6 +118,6 @@ private struct AlbumHeader: View {
         parts.append(detail.duration.formattedDuration)
         if let genre = detail.genres.first { parts.append(genre) }
         if !detail.label.isEmpty { parts.append(detail.label) }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " • ")
     }
 }
