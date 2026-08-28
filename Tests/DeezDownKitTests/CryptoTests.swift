@@ -98,31 +98,6 @@ func `a reset cryptor decrypts identically to a fresh cryptor per block`(size: I
     #expect(kept == mp4)
 }
 
-@Test func `the legacy stream path pads to a whole block, adding sixteen dots when already aligned`() throws {
-    let path = try #require(
-        LegacyStreamURL.streamPath(
-            trackID: "3135556",
-            md5Origin: "000790eceb6cb6732d225c0585632b31",
-            mediaVersion: "3",
-            format: .flac
-        )
-    )
-    #expect(path.count % 32 == 0)
-
-    var payload = Array("000790eceb6cb6732d225c0585632b31".utf8)
-    payload.append(LegacyStreamURL.separator)
-    payload += Array("9".utf8)
-    payload.append(LegacyStreamURL.separator)
-    payload += Array("3135556".utf8)
-    payload.append(LegacyStreamURL.separator)
-    payload += Array("3".utf8)
-
-    let unpadded = 32 + 1 + payload.count + 1
-    let expectedDots = 16 - (unpadded % 16)
-    #expect(expectedDots >= 1 && expectedDots <= 16)
-    #expect(path.count / 2 == unpadded + expectedDots)
-}
-
 @Test func `bitrate aliases resolve the way the deemix cli resolves them`() {
     #expect(TrackFormat.parse("flac") == .flac)
     #expect(TrackFormat.parse("lossless") == .flac)
@@ -134,32 +109,3 @@ func `a reset cryptor decrypts identically to a fresh cryptor per block`(size: I
     #expect(TrackFormat.parse("nonsense") == nil)
 }
 
-@Test func `the legacy stream path round-trips through AES with the right separators`() throws {
-    let path = try #require(
-        LegacyStreamURL.streamPath(
-            trackID: "3135556",
-            md5Origin: "000790eceb6cb6732d225c0585632b31",
-            mediaVersion: "3",
-            format: .mp3_128
-        )
-    )
-    let fields = try #require(LegacyStreamURL.decodeStreamPath(path))
-    #expect(fields.count == 6)
-    #expect(fields[1] == "000790eceb6cb6732d225c0585632b31")
-    #expect(fields[2] == "1")
-    #expect(fields[3] == "3135556")
-    #expect(fields[4] == "3")
-    #expect(fields[5].allSatisfy { $0 == "." })
-    #expect(fields[0].count == 32)
-}
-
-@Test func `the legacy url points at the sharded host derived from the md5`() throws {
-    let url = try #require(
-        LegacyStreamURL.cryptedURL(
-            trackID: "3135556", md5Origin: "a00790eceb6cb6732d225c0585632b31",
-            mediaVersion: "3", format: .flac
-        )
-    )
-    #expect(url.host() == "e-cdns-proxy-a.dzcdn.net")
-    #expect(url.path().hasPrefix("/mobile/1/"))
-}

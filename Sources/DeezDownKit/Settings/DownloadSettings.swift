@@ -149,7 +149,6 @@ public struct DownloadSettings: Sendable, Codable, Equatable {
     public var fallbackBitrate = true
     public var fallbackSearch = false
     public var fallbackISRC = false
-    public var feelingLucky = false
     public var overwriteFile = OverwriteMode.skip
     public var logErrors = true
     public var logSearched = false

@@ -76,7 +76,7 @@ public actor DownloadEngine {
     public func enqueue(_ link: DeezerLink, format requested: TrackFormat? = nil) async throws -> [String] {
         guard let user = await session.user else { throw DeezerError.notLoggedIn }
         var format = requested ?? settings.maxBitrate
-        if !settings.feelingLucky, !user.canStream(format) {
+        if !user.canStream(format) {
             guard settings.fallbackBitrate else { throw DownloadFailure(.wrongLicense) }
             format = user.highestAvailableFormat
         }

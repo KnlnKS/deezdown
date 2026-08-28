@@ -19,23 +19,6 @@ public struct MediaResolver: Sendable {
         self.settings = settings
     }
 
-    private static let probeSession: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpAdditionalHeaders = ["User-Agent": DeezerSession.userAgent]
-        configuration.timeoutIntervalForRequest = 10
-        return URLSession(configuration: configuration)
-    }()
-
-    /// Legacy CDN paths answer 403 or an empty body when the file isn't really there.
-    static func reachable(_ url: URL) async -> Bool {
-        var request = URLRequest(url: url)
-        request.setValue("bytes=0-1", forHTTPHeaderField: "Range")
-        guard let (data, response) = try? await probeSession.data(for: request),
-            let http = response as? HTTPURLResponse
-        else { return false }
-        return (200..<300).contains(http.statusCode) && !data.isEmpty
-    }
-
     public func ladder(for preferred: TrackFormat) -> [TrackFormat] {
         guard settings.fallbackBitrate else { return [preferred] }
         let family: [TrackFormat] =
@@ -84,19 +67,6 @@ public struct MediaResolver: Sendable {
                     case .failure(let code, _):
                         lastReason[index] = code == 2002 ? .wrongGeolocation(user.country) : .notAvailable
                     }
-                }
-            }
-            if settings.feelingLucky {
-                for index in unresolved where outcomes[index] == nil {
-                    guard let url = LegacyStreamURL.cryptedURL(
-                        trackID: pending[index].id,
-                        md5Origin: pending[index].md5Origin,
-                        mediaVersion: pending[index].mediaVersion,
-                        format: format
-                    ), await Self.reachable(url) else { continue }
-                    outcomes[index] = .success(
-                        ResolvedMedia(track: pending[index], format: format, urls: [url])
-                    )
                 }
             }
             unresolved.removeAll { outcomes[$0] != nil }
