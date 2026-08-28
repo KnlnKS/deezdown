@@ -107,6 +107,9 @@ private struct QueueRow: View {
         }
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: hovering)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(item.title) by \(item.subtitle)")
+        .accessibilityValue(statusText)
     }
 
     @ViewBuilder

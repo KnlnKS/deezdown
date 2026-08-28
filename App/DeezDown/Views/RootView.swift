@@ -84,9 +84,25 @@ struct RootView: View {
                 queueVisible.toggle()
             } label: {
                 Label("Queue", systemImage: "arrow.down.circle")
-                    .badge(model.activeDownloads)
+                    .overlay(alignment: .topTrailing) {
+                        if model.activeDownloads > 0 {
+                            Text(String(model.activeDownloads))
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.brand, in: Capsule())
+                                .offset(x: 8, y: -6)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
             }
             .help("Show the download queue")
+            .accessibilityLabel(
+                model.activeDownloads > 0
+                    ? "Download queue, \(model.activeDownloads) active" : "Download queue"
+            )
+            .animation(Motion.quick, value: model.activeDownloads)
         }
     }
 

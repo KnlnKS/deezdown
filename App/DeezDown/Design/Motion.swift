@@ -27,6 +27,7 @@ struct PressableButtonStyle: ButtonStyle {
 }
 
 struct HoverHighlight: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
     var corner: CGFloat = Metrics.cornerRadius
 
@@ -37,7 +38,7 @@ struct HoverHighlight: ViewModifier {
                     .fill(Color.primary.opacity(hovering ? 0.06 : 0))
             }
             .onHover { hovering = $0 }
-            .animation(Motion.quick, value: hovering)
+            .animation(reduceMotion ? nil : Motion.quick, value: hovering)
     }
 }
 

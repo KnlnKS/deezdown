@@ -39,6 +39,13 @@ struct DownloadCommands: Commands {
             Button("Add Link…") { NotificationCenter.default.post(name: .showAddLink, object: nil) }
                 .keyboardShortcut("l", modifiers: .command)
 
+            // Plain paste belongs to text fields, so queueing a copied link gets its own shortcut.
+            Button("Paste and Queue") {
+                guard let text = NSPasteboard.general.string(forType: .string) else { return }
+                Task { await model.enqueue(pasted: text) }
+            }
+            .keyboardShortcut("v", modifiers: [.command, .shift])
+
             Divider()
 
             Menu("Download Quality") {

@@ -71,3 +71,44 @@ public enum LegacyStreamURL {
         return output
     }
 }
+
+extension LegacyStreamURL {
+    /// Decodes a stream path back into its parts. Used to prove the encoding is correct
+    /// now that Deezer has retired the legacy `*-proxy-*.dzcdn.net` hosts entirely.
+    static func decodeStreamPath(_ hex: String) -> [String]? {
+        var bytes: [UInt8] = []
+        var index = hex.startIndex
+        while index < hex.endIndex, let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex) {
+            guard let byte = UInt8(hex[index..<next], radix: 16) else { return nil }
+            bytes.append(byte)
+            index = next
+        }
+        guard let plain = aesECBDecrypt(bytes) else { return nil }
+        return plain.split(separator: separator, omittingEmptySubsequences: false)
+            .map { String(decoding: $0, as: UTF8.self) }
+    }
+
+    static func aesECBDecrypt(_ input: [UInt8]) -> [UInt8]? {
+        let capacity = input.count
+        var output = [UInt8](repeating: 0, count: capacity)
+        var moved = 0
+        let status = aesKey.withUnsafeBytes { keyBuf in
+            input.withUnsafeBytes { inBuf in
+                output.withUnsafeMutableBytes { outBuf in
+                    CCCrypt(
+                        CCOperation(kCCDecrypt),
+                        CCAlgorithm(kCCAlgorithmAES),
+                        CCOptions(kCCOptionECBMode),
+                        keyBuf.baseAddress, kCCKeySizeAES128,
+                        nil,
+                        inBuf.baseAddress, capacity,
+                        outBuf.baseAddress, capacity,
+                        &moved
+                    )
+                }
+            }
+        }
+        guard status == kCCSuccess, moved == capacity else { return nil }
+        return output
+    }
+}

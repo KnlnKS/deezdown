@@ -133,3 +133,33 @@ func `a reset cryptor decrypts identically to a fresh cryptor per block`(size: I
     #expect(TrackFormat.parse("360_lq") == .mp4ra1)
     #expect(TrackFormat.parse("nonsense") == nil)
 }
+
+@Test func `the legacy stream path round-trips through AES with the right separators`() throws {
+    let path = try #require(
+        LegacyStreamURL.streamPath(
+            trackID: "3135556",
+            md5Origin: "000790eceb6cb6732d225c0585632b31",
+            mediaVersion: "3",
+            format: .mp3_128
+        )
+    )
+    let fields = try #require(LegacyStreamURL.decodeStreamPath(path))
+    #expect(fields.count == 6)
+    #expect(fields[1] == "000790eceb6cb6732d225c0585632b31")
+    #expect(fields[2] == "1")
+    #expect(fields[3] == "3135556")
+    #expect(fields[4] == "3")
+    #expect(fields[5].allSatisfy { $0 == "." })
+    #expect(fields[0].count == 32)
+}
+
+@Test func `the legacy url points at the sharded host derived from the md5`() throws {
+    let url = try #require(
+        LegacyStreamURL.cryptedURL(
+            trackID: "3135556", md5Origin: "a00790eceb6cb6732d225c0585632b31",
+            mediaVersion: "3", format: .flac
+        )
+    )
+    #expect(url.host() == "e-cdns-proxy-a.dzcdn.net")
+    #expect(url.path().hasPrefix("/mobile/1/"))
+}

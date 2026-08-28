@@ -277,7 +277,13 @@ public actor DownloadEngine {
             for (index, outcome) in resolvedMedia.enumerated() {
                 switch outcome {
                 case .success(let media):
-                    states[id]?.tracks[index] = media.track.applying(settings)
+                    let resolved = media.track.applying(settings)
+                    states[id]?.tracks[index] = resolved
+                    if media.track.searched {
+                        states[id]?.searched.append(
+                            "\(tracks[index].mainArtist.name) - \(tracks[index].title) -> \(resolved.id)"
+                        )
+                    }
                     jobs.append(TrackJob(itemID: id, index: index, media: media))
                 case .failure(let failure):
                     jobs.append(TrackJob(itemID: id, index: index, failure: failure))

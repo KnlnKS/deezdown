@@ -19,6 +19,23 @@ public struct MediaResolver: Sendable {
         self.settings = settings
     }
 
+    private static let probeSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpAdditionalHeaders = ["User-Agent": DeezerSession.userAgent]
+        configuration.timeoutIntervalForRequest = 10
+        return URLSession(configuration: configuration)
+    }()
+
+    /// Legacy CDN paths answer 403 or an empty body when the file isn't really there.
+    static func reachable(_ url: URL) async -> Bool {
+        var request = URLRequest(url: url)
+        request.setValue("bytes=0-1", forHTTPHeaderField: "Range")
+        guard let (data, response) = try? await probeSession.data(for: request),
+            let http = response as? HTTPURLResponse
+        else { return false }
+        return (200..<300).contains(http.statusCode) && !data.isEmpty
+    }
+
     public func ladder(for preferred: TrackFormat) -> [TrackFormat] {
         guard settings.fallbackBitrate else { return [preferred] }
         let family: [TrackFormat] =
@@ -69,11 +86,38 @@ public struct MediaResolver: Sendable {
                     }
                 }
             }
+            if settings.feelingLucky {
+                for index in unresolved where outcomes[index] == nil {
+                    guard let url = LegacyStreamURL.cryptedURL(
+                        trackID: pending[index].id,
+                        md5Origin: pending[index].md5Origin,
+                        mediaVersion: pending[index].mediaVersion,
+                        format: format
+                    ), await Self.reachable(url) else { continue }
+                    outcomes[index] = .success(
+                        ResolvedMedia(track: pending[index], format: format, urls: [url])
+                    )
+                }
+            }
             unresolved.removeAll { outcomes[$0] != nil }
         }
 
         if !unresolved.isEmpty {
             let recovered = try await resolveViaFallbackIDs(
+                indices: unresolved, tracks: &pending, outcomes: &outcomes, format: preferred
+            )
+            unresolved.removeAll { recovered.contains($0) || outcomes[$0] != nil }
+        }
+
+        if !unresolved.isEmpty, settings.fallbackISRC {
+            let recovered = try await resolveViaISRC(
+                indices: unresolved, tracks: &pending, outcomes: &outcomes, format: preferred
+            )
+            unresolved.removeAll { recovered.contains($0) || outcomes[$0] != nil }
+        }
+
+        if !unresolved.isEmpty, settings.fallbackSearch {
+            let recovered = try await resolveViaSearch(
                 indices: unresolved, tracks: &pending, outcomes: &outcomes, format: preferred
             )
             unresolved.removeAll { recovered.contains($0) || outcomes[$0] != nil }
@@ -123,6 +167,93 @@ public struct MediaResolver: Sendable {
         var recovered: Set<Int> = []
         for (offset, index) in ordered.enumerated() {
             if case .success(let media) = resolved[offset] {
+                outcomes[index] = .success(media)
+                tracks[index] = media.track
+                recovered.insert(index)
+            }
+        }
+        return recovered
+    }
+
+    /// The same recording often exists on other releases; try those before giving up.
+    private func resolveViaISRC(
+        indices: [Int],
+        tracks: inout [Track],
+        outcomes: inout [Result<ResolvedMedia, DownloadFailure>?],
+        format preferred: TrackFormat
+    ) async throws -> Set<Int> {
+        var replacements: [Int: Track] = [:]
+
+        for index in indices {
+            let track = tracks[index]
+            guard !track.isrc.isEmpty else { continue }
+            var albumIDs = track.alternativeAlbumIDs
+            if albumIDs.isEmpty, let refreshed = try? await session.trackData(id: track.id) {
+                albumIDs = Track(gateway: refreshed).alternativeAlbumIDs
+            }
+
+            for albumID in albumIDs where albumID != track.album.id {
+                guard let entries = try? await session.albumTracks(id: albumID) else { continue }
+                guard
+                    let match = entries.first(where: { $0["ISRC"].stringValue == track.isrc }),
+                    let candidateID = match["SNG_ID"].stringValue, candidateID != track.id
+                else { continue }
+                var candidate = Track(gateway: match, album: track.album, playlist: track.playlist)
+                candidate.position = track.position
+                candidate.trackNumber = track.trackNumber
+                candidate.discNumber = track.discNumber
+                replacements[index] = candidate
+                break
+            }
+        }
+
+        return try await adopt(replacements, tracks: &tracks, outcomes: &outcomes, format: preferred)
+    }
+
+    /// Last resort: ask Deezer to find the same song by its metadata.
+    private func resolveViaSearch(
+        indices: [Int],
+        tracks: inout [Track],
+        outcomes: inout [Result<ResolvedMedia, DownloadFailure>?],
+        format preferred: TrackFormat
+    ) async throws -> Set<Int> {
+        var replacements: [Int: Track] = [:]
+
+        for index in indices {
+            let track = tracks[index]
+            guard
+                let foundID = await session.trackID(
+                    artist: track.mainArtist.name, title: track.title, album: track.album.title
+                ),
+                foundID != track.id,
+                let entry = try? await session.trackData(id: foundID)
+            else { continue }
+            var candidate = Track(gateway: entry, album: track.album, playlist: track.playlist)
+            candidate.position = track.position
+            candidate.trackNumber = track.trackNumber
+            candidate.discNumber = track.discNumber
+            candidate.searched = true
+            replacements[index] = candidate
+        }
+
+        return try await adopt(replacements, tracks: &tracks, outcomes: &outcomes, format: preferred)
+    }
+
+    private func adopt(
+        _ replacements: [Int: Track],
+        tracks: inout [Track],
+        outcomes: inout [Result<ResolvedMedia, DownloadFailure>?],
+        format preferred: TrackFormat
+    ) async throws -> Set<Int> {
+        guard !replacements.isEmpty else { return [] }
+        let ordered = replacements.keys.sorted()
+        let resolved = try await resolve(ordered.map { replacements[$0]! }, format: preferred)
+
+        var recovered: Set<Int> = []
+        for (offset, index) in ordered.enumerated() {
+            if case .success(let media) = resolved[offset] {
+                var media = media
+                media.track.searched = replacements[index]?.searched ?? false
                 outcomes[index] = .success(media)
                 tracks[index] = media.track
                 recovered.insert(index)

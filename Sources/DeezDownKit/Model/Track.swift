@@ -30,6 +30,7 @@ public struct Track: Sendable, Codable, Equatable, Identifiable {
     public var md5Origin: String
     public var mediaVersion: String
     public var fallbackID: String?
+    public var alternativeAlbumIDs: [String]
     public var lyricsID: String
     public var lyrics: Lyrics?
     public var previewURL: URL?
@@ -105,6 +106,12 @@ public struct Track: Sendable, Codable, Equatable, Identifiable {
         mediaVersion = gateway["MEDIA_VERSION"].stringValue ?? "0"
         let fallback = gateway["FALLBACK"]["SNG_ID"].stringValue
         fallbackID = (fallback == nil || fallback == "0") ? nil : fallback
+        alternativeAlbumIDs = gateway["ALBUM_FALLBACK"]["data"].arrayValue
+            .filter {
+                ($0["RIGHTS"]["STREAM_SUB_AVAILABLE"].boolValue ?? false)
+                    || ($0["RIGHTS"]["STREAM_ADS_AVAILABLE"].boolValue ?? false)
+            }
+            .compactMap { $0["ALB_ID"].stringValue }
         lyricsID = gateway["LYRICS_ID"].stringValue ?? "0"
         if gateway["LYRICS"] != .null { lyrics = Lyrics(results: gateway["LYRICS"]) }
         previewURL = gateway["MEDIA"].arrayValue
