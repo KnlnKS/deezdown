@@ -136,7 +136,7 @@ public struct PathBuilder: Sendable {
                 path: component(settings.playlistNameTemplate, playlistVariables(playlist, context))
             )
         }
-        let extrasDirectory = directory
+        var extrasDirectory: URL? = insidePlaylist ? directory : nil
 
         var artistDirectory: URL?
         if followsAlbumStructure, settings.createArtistFolder {
@@ -149,12 +149,16 @@ public struct PathBuilder: Sendable {
         let wantsAlbumFolder =
             followsAlbumStructure && settings.createAlbumFolder
             && (!context.isSingleTrackDownload || settings.createSingleFolder)
+        var coverDirectory: URL?
         if wantsAlbumFolder {
             directory = directory.appending(
                 path: component(settings.albumNameTemplate, albumVariables(track, context))
             )
+            coverDirectory = directory
         }
-        let coverDirectory = directory
+
+        let extras = extrasDirectory ?? directory
+        extrasDirectory = extras
 
         if wantsAlbumFolder, settings.createCDFolder, track.album.discTotal > 1 {
             directory = directory.appending(path: "CD\(track.discNumber)")
@@ -171,14 +175,20 @@ public struct PathBuilder: Sendable {
 
         var rendered = TemplateEngine.render(template, trackVariables(track, context))
         rendered = NameSanitizer.fixName(rendered, replacer: settings.illegalCharacterReplacer)
-        rendered = NameSanitizer.antiDot(NameSanitizer.fixLongName(rendered))
+        rendered = NameSanitizer.fixLongName(rendered)
+
+        // A separator that survives sanitization becomes a real subfolder, as in deemix.
+        if let slash = rendered.firstIndex(of: "/") {
+            directory = directory.appending(path: NameSanitizer.antiDot(String(rendered[..<slash])))
+            rendered = String(rendered[rendered.index(after: slash)...])
+        }
 
         return DownloadPaths(
-            filename: rendered,
+            filename: NameSanitizer.antiDot(rendered),
             directory: directory,
             artistDirectory: artistDirectory,
-            coverDirectory: coverDirectory,
-            extrasDirectory: extrasDirectory
+            coverDirectory: coverDirectory ?? extras,
+            extrasDirectory: extras
         )
     }
 
