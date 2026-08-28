@@ -1,70 +1,72 @@
 import DeezDownKit
 import SwiftUI
 
-struct QueueInspector: View {
+struct DownloadsScreen: View {
     @Environment(AppModel.self) private var model
     @State private var issuesFor: QueueItem?
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
+        Group {
             if model.queue.isEmpty {
                 ContentUnavailableView {
                     Label("Nothing Queued", systemImage: "arrow.down.circle")
                 } description: {
                     Text("Downloads you start will appear here.")
+                } actions: {
+                    Button("Add Link…") {
+                        NotificationCenter.default.post(name: .showAddLink, object: nil)
+                    }
                 }
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 6) {
+                    LazyVStack(spacing: 8) {
                         ForEach(model.queue) { item in
-                            QueueRow(item: item) { issuesFor = item }
+                            DownloadRow(item: item) { issuesFor = item }
                         }
                     }
-                    .padding(10)
+                    .padding(Metrics.gutter)
                     .animation(Motion.standard, value: model.queue.map(\.id))
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle("Downloads")
+        .navigationSubtitle(subtitle)
+        .toolbar {
+            ToolbarItem {
+                Button { model.revealDownloads() } label: {
+                    Label("Open Downloads Folder", systemImage: "folder")
+                }
+                .help("Open the downloads folder")
+            }
+            ToolbarItem {
+                Button { model.clearFinished() } label: {
+                    Label("Clear Finished", systemImage: "checklist.checked")
+                }
+                .disabled(!model.queue.contains { [.completed, .canceled].contains($0.status) })
+                .help("Clear finished downloads")
+            }
+            ToolbarItem {
+                Button { model.cancelAll() } label: {
+                    Label("Cancel All", systemImage: "xmark.circle")
+                }
+                .disabled(model.activeDownloads == 0)
+                .help("Cancel everything in the queue")
+            }
+        }
         .sheet(item: $issuesFor) { item in IssuesSheet(item: item) }
     }
 
-    /// Lives in the panel rather than the window toolbar so the controls disappear with it.
-    private var header: some View {
-        HStack(spacing: 6) {
-            Text("Downloads")
-                .font(.headline)
-            if model.activeDownloads > 0 {
-                Text("\(model.activeDownloads)")
-                    .font(.caption.weight(.semibold).monospacedDigit())
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(Color.brandSoft, in: Capsule())
-                    .foregroundStyle(.brand)
-            }
-            Spacer(minLength: 0)
-            Button { model.revealDownloads() } label: { Image(systemName: "folder") }
-                .help("Open the downloads folder")
-                .accessibilityLabel("Open the downloads folder")
-            Button { model.clearFinished() } label: { Image(systemName: "checklist.checked") }
-                .disabled(!model.queue.contains { [.completed, .canceled].contains($0.status) })
-                .help("Clear finished downloads")
-                .accessibilityLabel("Clear finished downloads")
-            Button { model.cancelAll() } label: { Image(systemName: "xmark.circle") }
-                .disabled(model.activeDownloads == 0)
-                .help("Cancel everything in the queue")
-                .accessibilityLabel("Cancel everything in the queue")
-        }
-        .buttonStyle(.borderless)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(.bar)
+    private var subtitle: String {
+        let active = model.activeDownloads
+        if active > 0 { return "\(active) in progress" }
+        let tracks = model.queue.reduce(0) { $0 + $1.completedTracks }
+        guard tracks > 0 else { return "" }
+        return "\(tracks) track\(tracks == 1 ? "" : "s") downloaded"
     }
 }
 
-private struct QueueRow: View {
+private struct DownloadRow: View {
     @Environment(AppModel.self) private var model
     var item: QueueItem
     var showIssues: () -> Void
@@ -72,37 +74,36 @@ private struct QueueRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(spacing: 14) {
             ZStack(alignment: .bottomLeading) {
-                ArtworkView(picture: item.cover, side: 46, corner: 7)
+                ArtworkView(picture: item.cover, side: 54, corner: 8)
                 Text(item.format.displayName)
                     .font(.system(size: 8, weight: .bold))
                     .padding(.horizontal, 3)
                     .padding(.vertical, 1)
-                    .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 3))
+                    .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 3))
                     .foregroundStyle(.white)
                     .padding(3)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Text(item.title).font(.callout.weight(.medium)).lineLimit(1)
-                    Spacer(minLength: 0)
-                    action
-                }
-                Text(item.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title).font(.body.weight(.medium)).lineLimit(1)
+                Text(item.subtitle).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
+            VStack(alignment: .trailing, spacing: 5) {
                 ProgressView(value: item.progress)
                     .progressViewStyle(.linear)
                     .tint(barTint)
                     .opacity(item.status == .queued ? 0.35 : 1)
-
+                    .frame(width: 220)
                 HStack(spacing: 6) {
-                    Text(statusText).font(.caption2).foregroundStyle(.secondary)
+                    Text(statusText).font(.caption).foregroundStyle(.secondary)
                     if item.failedTracks > 0 {
                         Button(action: showIssues) {
                             Label("\(item.failedTracks)", systemImage: "exclamationmark.triangle.fill")
-                                .font(.caption2)
+                                .font(.caption)
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.failure)
@@ -110,31 +111,66 @@ private struct QueueRow: View {
                     }
                 }
             }
+
+            actions
+                .frame(width: 56, alignment: .trailing)
         }
-        .padding(8)
-        .background(Color.raised, in: RoundedRectangle(cornerRadius: Metrics.cornerRadius, style: .continuous))
+        .padding(12)
+        .background(Color.raised, in: RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Metrics.cornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.06))
         }
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: hovering)
+        .contextMenu {
+            if item.canRetry { Button("Retry") { model.retry(item.id) } }
+            if let destination = item.destination {
+                Button("Show in Finder") {
+                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: destination.path(percentEncoded: false))
+                }
+            }
+            if let url = item.link.webURL {
+                Button("Copy Deezer Link") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                }
+            }
+            Divider()
+            Button("Remove", role: .destructive) { model.remove(item.id) }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(item.title) by \(item.subtitle)")
         .accessibilityValue(statusText)
     }
 
     @ViewBuilder
-    private var action: some View {
-        if item.canRetry, hovering {
-            Button { model.retry(item.id) } label: { Image(systemName: "arrow.clockwise") }
-                .buttonStyle(.plain).foregroundStyle(.secondary).help("Retry")
-        } else if item.status.isFinished {
-            Button { model.remove(item.id) } label: { Image(systemName: symbol) }
-                .buttonStyle(.plain).foregroundStyle(tint).help("Remove from the queue")
-        } else {
-            Button { model.cancel(item.id) } label: { Image(systemName: "xmark.circle.fill") }
-                .buttonStyle(.plain).foregroundStyle(.secondary).help("Cancel")
+    private var actions: some View {
+        HStack(spacing: 8) {
+            if item.canRetry {
+                Button { model.retry(item.id) } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.borderless)
+                    .help("Retry")
+                    .accessibilityLabel("Retry \(item.title)")
+            }
+            if item.status.isFinished {
+                Button { model.remove(item.id) } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .opacity(hovering ? 1 : 0)
+                    .help("Remove from the list")
+                    .accessibilityLabel("Remove \(item.title)")
+                Image(systemName: symbol)
+                    .foregroundStyle(tint)
+                    .opacity(hovering ? 0 : 1)
+                    .accessibilityHidden(true)
+            } else {
+                Button { model.cancel(item.id) } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Cancel")
+                    .accessibilityLabel("Cancel \(item.title)")
+            }
         }
     }
 
@@ -181,7 +217,7 @@ private struct QueueRow: View {
     }
 }
 
-private struct IssuesSheet: View {
+struct IssuesSheet: View {
     @Environment(\.dismiss) private var dismiss
     var item: QueueItem
 

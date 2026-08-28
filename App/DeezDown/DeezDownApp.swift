@@ -20,7 +20,6 @@ struct DeezDownApp: App {
                     .keyboardShortcut("f", modifiers: .command)
             }
             SidebarCommands()
-            InspectorCommands()
             DownloadCommands(model: model)
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .help) {
@@ -49,6 +48,11 @@ struct DownloadCommands: Commands {
                 Task { await model.enqueue(pasted: text) }
             }
             .keyboardShortcut("v", modifiers: [.command, .shift])
+
+            Button("Show Downloads") {
+                NotificationCenter.default.post(name: .showDownloads, object: nil)
+            }
+            .keyboardShortcut("d", modifiers: [.command, .shift])
 
             Divider()
 
@@ -96,4 +100,5 @@ struct DownloadCommands: Commands {
 extension Notification.Name {
     static let showAddLink = Notification.Name("DeezDown.showAddLink")
     static let focusSearch = Notification.Name("DeezDown.focusSearch")
+    static let showDownloads = Notification.Name("DeezDown.showDownloads")
 }

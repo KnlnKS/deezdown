@@ -9,7 +9,6 @@ struct RootView: View {
     @State private var searchText = ""
     @State private var searchTab = SearchTab.all
     @State private var showAddLink = false
-    @SceneStorage("queueVisible") private var queueVisible = true
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
     var body: some View {
@@ -28,12 +27,14 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showAddLink)) { _ in
             showAddLink = model.isSignedIn
         }
-        .onChange(of: model.queue.count) { previous, current in
-            if current > previous { queueVisible = true }
-        }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             guard model.isSignedIn else { return }
             section = .search
+            path = NavigationPath()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showDownloads)) { _ in
+            guard model.isSignedIn else { return }
+            section = .downloads
             path = NavigationPath()
         }
         .sheet(isPresented: $showAddLink) { AddLinkSheet() }
@@ -55,11 +56,6 @@ struct RootView: View {
                     }
             }
         }
-        // Attached to the split view, not the stack, so drilling in keeps the queue on screen.
-        .inspector(isPresented: $queueVisible) {
-            QueueInspector()
-                .inspectorColumnWidth(min: 260, ideal: 300, max: 420)
-        }
         .toolbar { toolbar }
     }
 
@@ -70,6 +66,7 @@ struct RootView: View {
         case .search: SearchScreen(query: $searchText, tab: $searchTab)
         case .favorites: FavoritesScreen()
         case .charts: ChartsScreen()
+        case .downloads: DownloadsScreen()
         }
     }
 
@@ -82,31 +79,6 @@ struct RootView: View {
                 Label("Add Link", systemImage: "plus")
             }
             .help("Add a Deezer link to the queue (⌘L)")
-        }
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                queueVisible.toggle()
-            } label: {
-                Label("Queue", systemImage: "arrow.down.circle")
-                    .overlay(alignment: .topTrailing) {
-                        if model.activeDownloads > 0 {
-                            Text(String(model.activeDownloads))
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(Color.brand, in: Capsule())
-                                .offset(x: 8, y: -6)
-                                .transition(.scale.combined(with: .opacity))
-                        }
-                    }
-            }
-            .help("Show the download queue")
-            .accessibilityLabel(
-                model.activeDownloads > 0
-                    ? "Download queue, \(model.activeDownloads) active" : "Download queue"
-            )
-            .animation(Motion.quick, value: model.activeDownloads)
         }
     }
 }

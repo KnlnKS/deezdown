@@ -9,9 +9,14 @@ struct SidebarView: View {
     var body: some View {
         List(selection: $section) {
             Section {
-                ForEach(SidebarSection.allCases) { item in
+                ForEach(SidebarSection.browsing) { item in
                     Label(item.title, systemImage: item.symbol).tag(item)
                 }
+            }
+            Section {
+                Label(SidebarSection.downloads.title, systemImage: SidebarSection.downloads.symbol)
+                    .badge(model.activeDownloads)
+                    .tag(SidebarSection.downloads)
             }
         }
         .listStyle(.sidebar)
