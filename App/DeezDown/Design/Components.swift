@@ -36,6 +36,33 @@ struct DownloadIconButton: View {
     }
 }
 
+/// Sits on the artwork, so it needs its own ground to stay legible over any cover.
+struct CardDownloadButton: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var link: DeezerLink
+    var isVisible: Bool
+
+    var body: some View {
+        Button {
+            Task { await model.enqueue(link) }
+        } label: {
+            Image(systemName: "arrow.down")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(Color.brand, in: Circle())
+                .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
+        }
+        .buttonStyle(.plain)
+        .pressable(scale: 0.9)
+        .opacity(isVisible ? 1 : 0)
+        .scaleEffect(isVisible || reduceMotion ? 1 : 0.6)
+        .help("Download")
+        .accessibilityLabel("Download")
+    }
+}
+
 struct DownloadContextMenu: ViewModifier {
     @Environment(AppModel.self) private var model
     var link: DeezerLink
@@ -112,12 +139,8 @@ struct MediaCard: View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .bottomTrailing) {
                 FillingArtworkView(picture: picture, isCircular: circular)
-                DownloadIconButton(link: link)
-                    .font(.title2)
-                    .padding(8)
-                    .opacity(hovering ? 1 : 0)
-                    .scaleEffect(hovering ? 1 : 0.85)
-                    .shadow(radius: 6, y: 2)
+                CardDownloadButton(link: link, isVisible: hovering)
+                    .padding(10)
             }
 
             VStack(alignment: .leading, spacing: 1) {
@@ -128,7 +151,7 @@ struct MediaCard: View {
         }
         .contentShape(.rect)
         .onHover { hovering = $0 }
-        .animation(Motion.quick, value: hovering)
+        .animation(Motion.momentum, value: hovering)
         .downloadContextMenu(link)
     }
 }
