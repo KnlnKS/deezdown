@@ -140,6 +140,19 @@ public struct SearchResults: Sendable, Equatable {
     }
 }
 
+public struct HomeFeed: Sendable, Equatable {
+    public var history: [AlbumSummary] = []
+    public var playlists: [PlaylistSummary] = []
+    public var artists: [ArtistSummary] = []
+    public var topAlbums: [AlbumSummary] = []
+    public var topPlaylists: [PlaylistSummary] = []
+
+    public var isEmpty: Bool {
+        history.isEmpty && playlists.isEmpty && artists.isEmpty
+            && topAlbums.isEmpty && topPlaylists.isEmpty
+    }
+}
+
 public struct AlbumDetail: Sendable, Equatable {
     public var summary: AlbumSummary
     public var tracks: [TrackSummary]

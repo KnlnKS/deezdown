@@ -134,6 +134,33 @@ public struct DeezerLibrary: Sendable {
         )
     }
 
+    /// History is one entry per play, so a record the user sat with fills the whole row;
+    /// collapsing to the album keeps it varied and matches how Deezer presents it.
+    public func recentlyPlayed(limit: Int = 100) async throws -> [AlbumSummary] {
+        var seen = Set<String>()
+        return try await session.songsHistory(limit: limit)
+            .map(AlbumSummary.init(gateway:))
+            .filter { !$0.title.isEmpty && seen.insert($0.id).inserted }
+    }
+
+    /// Everything home shows, gathered at once. Only the charts are load-bearing: the personal
+    /// rows drop out quietly if the account has nothing to show or the gateway declines.
+    public func home() async throws -> HomeFeed {
+        async let historyTask = recentlyPlayed()
+        async let personalTask = favorites()
+        async let chartsTask = charts()
+
+        let top = try await chartsTask
+        let personal = try? await personalTask
+        return HomeFeed(
+            history: (try? await historyTask) ?? [],
+            playlists: personal?.playlists ?? [],
+            artists: personal?.artists ?? [],
+            topAlbums: top.albums,
+            topPlaylists: top.playlists
+        )
+    }
+
     public func lovedTracksLink() async -> DeezerLink? {
         guard let user = await session.user, !user.lovedTracksID.isEmpty else { return nil }
         return .playlist(user.lovedTracksID)

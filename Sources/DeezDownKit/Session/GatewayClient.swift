@@ -129,6 +129,14 @@ extension DeezerSession {
         return results["TAB"][tab.rawValue]["data"].arrayValue
     }
 
+    /// The listening history behind Deezer's own "recently played" row.
+    public func songsHistory(limit: Int = 100, start: Int = 0) async throws -> [JSONValue] {
+        let results = try await gateway(
+            "user.getSongsHistory", ["nb": .int(limit), "start": .int(start)]
+        )
+        return results["data"].arrayValue
+    }
+
     public func userMenu() async throws -> JSONValue {
         try await gateway("deezer.userMenu")
     }
