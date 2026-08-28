@@ -168,8 +168,9 @@ public actor DownloadEngine {
         publish()
     }
 
+    /// Clears what needs no attention; items that failed stay so their errors can be read.
     public func clearFinished() {
-        for id in order where items[id]?.status == .completed { remove(id) }
+        for id in order where [.completed, .canceled].contains(items[id]?.status) { remove(id) }
     }
 
     public func retry(_ id: String) {

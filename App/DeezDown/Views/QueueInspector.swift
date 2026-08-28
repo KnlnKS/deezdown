@@ -49,7 +49,7 @@ struct QueueInspector: View {
                 .help("Open the downloads folder")
                 .accessibilityLabel("Open the downloads folder")
             Button { model.clearFinished() } label: { Image(systemName: "checklist.checked") }
-                .disabled(!model.queue.contains { $0.status == .completed })
+                .disabled(!model.queue.contains { [.completed, .canceled].contains($0.status) })
                 .help("Clear finished downloads")
                 .accessibilityLabel("Clear finished downloads")
             Button { model.cancelAll() } label: { Image(systemName: "xmark.circle") }

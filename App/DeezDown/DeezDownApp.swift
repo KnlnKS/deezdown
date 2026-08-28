@@ -69,7 +69,7 @@ struct DownloadCommands: Commands {
 
             Button("Clear Finished") { model.clearFinished() }
                 .keyboardShortcut(.delete, modifiers: [.command, .shift])
-                .disabled(!model.queue.contains { $0.status == .completed })
+                .disabled(!model.queue.contains { [.completed, .canceled].contains($0.status) })
 
             Button("Cancel All") { model.cancelAll() }
                 .disabled(model.activeDownloads == 0)

@@ -2,17 +2,33 @@ import DeezDownKit
 import SwiftUI
 
 struct Page<Item: Identifiable & Sendable>: Sendable {
+    static var size: Int { 40 }
+
     var items: [Item] = []
     var total = 0
     var isLoading = false
-    var loadedQuery = ""
+    var isExhausted = false
 
-    var hasMore: Bool { !items.isEmpty && items.count < total }
+    /// Deezer's reported total overshoots what it will actually serve, so a short page —
+    /// not the counter — is what marks the end.
+    var hasMore: Bool { !isExhausted }
 
-    mutating func reset(for query: String) {
+    mutating func reset() {
         items = []
         total = 0
-        loadedQuery = query
+        isExhausted = false
+        isLoading = false
+    }
+
+    mutating func append(_ incoming: [Item], total reported: Int) {
+        let seen = Set(items.map(\.id))
+        let fresh = incoming.filter { !seen.contains($0.id) }
+        items += fresh
+        total = reported
+        if incoming.count < Self.size || fresh.isEmpty || items.count >= reported {
+            isExhausted = true
+        }
+        isLoading = false
     }
 }
 
@@ -34,9 +50,12 @@ struct SearchScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             controls
+                .fixedSize(horizontal: false, vertical: true)
             Divider()
             results
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle("Search")
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in field.focus?() }
         .task(id: query) { await reload() }
@@ -124,44 +143,45 @@ struct SearchScreen: View {
                         .padding(.horizontal, Metrics.gutter)
                         .hoverHighlight(corner: 6)
                 }
-                loadMoreFooter(tracks.hasMore, isLoading: tracks.isLoading)
+                loadMoreFooter(tracks.hasMore, count: tracks.items.count)
             }
             .padding(.vertical, 8)
         }
     }
 
     private var albumResults: some View {
-        pagedGrid(albums.hasMore, isLoading: albums.isLoading) { albumGrid(albums.items) }
+        pagedGrid(albums.hasMore, count: albums.items.count) { albumGrid(albums.items) }
     }
 
     private var artistResults: some View {
-        pagedGrid(artists.hasMore, isLoading: artists.isLoading) { artistGrid(artists.items) }
+        pagedGrid(artists.hasMore, count: artists.items.count) { artistGrid(artists.items) }
     }
 
     private var playlistResults: some View {
-        pagedGrid(playlists.hasMore, isLoading: playlists.isLoading) { playlistGrid(playlists.items) }
+        pagedGrid(playlists.hasMore, count: playlists.items.count) { playlistGrid(playlists.items) }
     }
 
-    private func pagedGrid(_ hasMore: Bool, isLoading: Bool, @ViewBuilder grid: () -> some View) -> some View {
+    private func pagedGrid(_ hasMore: Bool, count: Int, @ViewBuilder grid: () -> some View) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 grid()
-                loadMoreFooter(hasMore, isLoading: isLoading)
+                loadMoreFooter(hasMore, count: count)
             }
             .padding(Metrics.gutter)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    /// Appearing at the bottom of the scroll view is what pulls the next page in.
+    /// Appearing at the bottom of the scroll view is what pulls the next page in; keying the
+    /// task on the item count makes it fire again for each new page, and only while more exist.
     @ViewBuilder
-    private func loadMoreFooter(_ hasMore: Bool, isLoading: Bool) -> some View {
-        if hasMore || isLoading {
+    private func loadMoreFooter(_ hasMore: Bool, count: Int) -> some View {
+        if hasMore {
             ProgressView()
                 .controlSize(.small)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 18)
-                .task { await loadMore() }
+                .task(id: count) { await loadMore() }
         }
     }
 
@@ -214,10 +234,10 @@ struct SearchScreen: View {
         guard !trimmed.isEmpty else { return }
         guard force || trimmed != overviewQuery else { return }
 
-        tracks.reset(for: trimmed)
-        albums.reset(for: trimmed)
-        artists.reset(for: trimmed)
-        playlists.reset(for: trimmed)
+        tracks.reset()
+        albums.reset()
+        artists.reset()
+        playlists.reset()
 
         overview = .loading
         try? await Task.sleep(for: .milliseconds(220))
@@ -255,39 +275,44 @@ struct SearchScreen: View {
             case .all:
                 return
             case .tracks:
-                guard !tracks.isLoading else { return }
+                guard !tracks.isLoading, tracks.hasMore else { return }
                 tracks.isLoading = true
-                let (items, total) = try await model.library.searchTracks(text, start: tracks.items.count)
+                let (items, total) = try await model.library.searchTracks(
+                    text, start: tracks.items.count, limit: Page<TrackSummary>.size
+                )
                 guard text == trimmed else { return }
-                tracks.items += items
-                tracks.total = total
-                tracks.isLoading = false
+                tracks.append(items, total: total)
             case .albums:
-                guard !albums.isLoading else { return }
+                guard !albums.isLoading, albums.hasMore else { return }
                 albums.isLoading = true
-                let (items, total) = try await model.library.searchAlbums(text, start: albums.items.count)
+                let (items, total) = try await model.library.searchAlbums(
+                    text, start: albums.items.count, limit: Page<AlbumSummary>.size
+                )
                 guard text == trimmed else { return }
-                albums.items += items
-                albums.total = total
-                albums.isLoading = false
+                albums.append(items, total: total)
             case .artists:
-                guard !artists.isLoading else { return }
+                guard !artists.isLoading, artists.hasMore else { return }
                 artists.isLoading = true
-                let (items, total) = try await model.library.searchArtists(text, start: artists.items.count)
+                let (items, total) = try await model.library.searchArtists(
+                    text, start: artists.items.count, limit: Page<ArtistSummary>.size
+                )
                 guard text == trimmed else { return }
-                artists.items += items
-                artists.total = total
-                artists.isLoading = false
+                artists.append(items, total: total)
             case .playlists:
-                guard !playlists.isLoading else { return }
+                guard !playlists.isLoading, playlists.hasMore else { return }
                 playlists.isLoading = true
-                let (items, total) = try await model.library.searchPlaylists(text, start: playlists.items.count)
+                let (items, total) = try await model.library.searchPlaylists(
+                    text, start: playlists.items.count, limit: Page<PlaylistSummary>.size
+                )
                 guard text == trimmed else { return }
-                playlists.items += items
-                playlists.total = total
-                playlists.isLoading = false
+                playlists.append(items, total: total)
             }
         } catch {
+            // A failed page ends the run rather than spinning forever.
+            tracks.isExhausted = tab == .tracks || tracks.isExhausted
+            albums.isExhausted = tab == .albums || albums.isExhausted
+            artists.isExhausted = tab == .artists || artists.isExhausted
+            playlists.isExhausted = tab == .playlists || playlists.isExhausted
             tracks.isLoading = false
             albums.isLoading = false
             artists.isLoading = false

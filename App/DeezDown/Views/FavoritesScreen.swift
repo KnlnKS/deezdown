@@ -13,6 +13,20 @@ struct FavoritesScreen: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            UnderlineTabs(selection: $tab, options: Tab.allCases.map { ($0, $0.title) })
+                .padding(.horizontal, Metrics.gutter)
+                .padding(.top, 16)
+            Divider()
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .navigationTitle("Favorites")
+        .task { await load() }
+    }
+
+    private var content: some View {
         AsyncContent(state: state, retry: { Task { await load() } }) { results in
             Group {
                 switch tab {
@@ -36,32 +50,7 @@ struct FavoritesScreen: View {
                     ScreenScroll { grid(results) }
                 }
             }
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("View", selection: $tab) {
-                        ForEach(Tab.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .fixedSize()
-                }
-                ToolbarItem {
-                    Button {
-                        Task {
-                            if let link = await model.library.lovedTracksLink() {
-                                await model.enqueue(link)
-                            } else {
-                                model.show(Toast(message: "No loved tracks playlist", kind: .failure))
-                            }
-                        }
-                    } label: {
-                        Label("Download Loved Tracks", systemImage: "arrow.down.heart")
-                    }
-                    .help("Queue your loved tracks playlist")
-                }
-            }
         }
-        .navigationTitle("Favorites")
-        .task { await load() }
     }
 
     @ViewBuilder
