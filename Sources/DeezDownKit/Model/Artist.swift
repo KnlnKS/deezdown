@@ -17,10 +17,10 @@ public enum ArtistRole: String, Sendable, Codable, Equatable {
 public struct ArtistRef: Sendable, Codable, Equatable, Hashable, Identifiable {
     public var id: String
     public var name: String
-    public var picture: Picture
+    public var picture: Artwork
     public var role: ArtistRole
 
-    public init(id: String, name: String, picture: Picture = Picture(md5: "", kind: .artist), role: ArtistRole = .main) {
+    public init(id: String, name: String, picture: Artwork = Artwork(md5: "", kind: .artist), role: ArtistRole = .main) {
         self.id = id
         self.name = name
         self.picture = picture
@@ -30,7 +30,7 @@ public struct ArtistRef: Sendable, Codable, Equatable, Hashable, Identifiable {
     init(gateway: JSONValue) {
         id = gateway["ART_ID"].stringValue ?? "0"
         name = gateway["ART_NAME"].stringValue ?? ""
-        picture = Picture(md5: gateway["ART_PICTURE"].stringValue ?? "", kind: .artist)
+        picture = Artwork(md5: gateway["ART_PICTURE"].stringValue ?? "", kind: .artist)
         role = ArtistRole(roleID: gateway["ROLE_ID"].intValue)
     }
 

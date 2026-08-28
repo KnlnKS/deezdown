@@ -89,7 +89,7 @@ public struct Track: Sendable, Codable, Equatable, Identifiable {
             id: gateway["ALB_ID"].stringValue ?? "0",
             title: gateway["ALB_TITLE"].stringValue ?? "",
             mainArtist: main,
-            cover: Picture(md5: gateway["ALB_PICTURE"].stringValue ?? "", kind: .cover)
+            cover: Artwork(md5: gateway["ALB_PICTURE"].stringValue ?? "", kind: .cover)
         )
         self.playlist = playlist
 

@@ -4,7 +4,7 @@ public struct ResolvedCollection: Sendable {
     public var link: DeezerLink
     public var title: String
     public var subtitle: String
-    public var cover: Picture
+    public var cover: Artwork
     public var tracks: [Track]
     public var album: Album?
     public var playlist: Playlist?

@@ -7,7 +7,7 @@ enum FLACTagWriter {
         case vorbisComment = 4, cueSheet = 5, picture = 6
     }
 
-    struct Picture {
+    struct EmbeddedImage {
         var data: Data
         var mimeType: String
         var description: String
@@ -15,7 +15,7 @@ enum FLACTagWriter {
 
     struct MalformedFLAC: Error {}
 
-    static func write(comments: [(String, String)], picture: Picture?, to url: URL) throws {
+    static func write(comments: [(String, String)], picture: EmbeddedImage?, to url: URL) throws {
         let handle = try FileHandle(forUpdating: url)
         defer { try? handle.close() }
 
@@ -101,7 +101,7 @@ enum FLACTagWriter {
         return Data(bytes)
     }
 
-    static func pictureBlock(_ picture: Picture) -> Data {
+    static func pictureBlock(_ picture: EmbeddedImage) -> Data {
         let dimensions = ImageDimensions.read(picture.data) ?? (0, 0, 24)
         let mime = Array(picture.mimeType.utf8)
         let description = Array(picture.description.utf8)

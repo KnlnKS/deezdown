@@ -14,7 +14,7 @@ public actor ArtworkStore {
         urlSession = URLSession(configuration: configuration)
     }
 
-    public func image(_ picture: Picture, size: Int, format: ImageFormat) async -> Data? {
+    public func image(_ picture: Artwork, size: Int, format: ImageFormat) async -> Data? {
         guard let url = picture.url(size: size, format: format) else { return nil }
         if let cached = cache[url] { return cached }
         if let running = inFlight[url] { return await running.value }

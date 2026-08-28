@@ -8,7 +8,7 @@ public struct TrackSummary: Sendable, Identifiable, Equatable, Hashable {
     public var artistID: String
     public var album: String
     public var albumID: String
-    public var cover: Picture
+    public var cover: Artwork
     public var duration: Int
     public var explicit: Bool
     public var position: Int?
@@ -26,7 +26,7 @@ public struct TrackSummary: Sendable, Identifiable, Equatable, Hashable {
         artistID = gateway["ART_ID"].stringValue ?? "0"
         album = gateway["ALB_TITLE"].stringValue ?? ""
         albumID = gateway["ALB_ID"].stringValue ?? "0"
-        cover = Picture(md5: gateway["ALB_PICTURE"].stringValue ?? "", kind: .cover)
+        cover = Artwork(md5: gateway["ALB_PICTURE"].stringValue ?? "", kind: .cover)
         duration = gateway["DURATION"].intValue ?? 0
         explicit = (gateway["EXPLICIT_TRACK_CONTENT"]["EXPLICIT_LYRICS_STATUS"].intValue
             ?? gateway["EXPLICIT_LYRICS"].intValue ?? 0) == 1
@@ -43,7 +43,7 @@ public struct AlbumSummary: Sendable, Identifiable, Equatable, Hashable {
     public var title: String
     public var artist: String
     public var artistID: String
-    public var cover: Picture
+    public var cover: Artwork
     public var trackCount: Int
     public var year: String
     public var explicit: Bool
@@ -56,7 +56,7 @@ public struct AlbumSummary: Sendable, Identifiable, Equatable, Hashable {
         title = gateway["ALB_TITLE"].stringValue ?? ""
         artist = gateway["ART_NAME"].stringValue ?? ""
         artistID = gateway["ART_ID"].stringValue ?? "0"
-        cover = Picture(md5: gateway["ALB_PICTURE"].stringValue ?? "", kind: .cover)
+        cover = Artwork(md5: gateway["ALB_PICTURE"].stringValue ?? "", kind: .cover)
         trackCount = gateway["NUMBER_TRACK"].intValue ?? 0
         year = String(
             (gateway["DIGITAL_RELEASE_DATE"].stringValue ?? gateway["PHYSICAL_RELEASE_DATE"].stringValue
@@ -71,7 +71,7 @@ public struct AlbumSummary: Sendable, Identifiable, Equatable, Hashable {
         title = publicData["title"].stringValue ?? ""
         artist = publicData["artist"]["name"].stringValue ?? ""
         artistID = publicData["artist"]["id"].stringValue ?? "0"
-        cover = Picture(md5: publicData["md5_image"].stringValue ?? "", kind: .cover)
+        cover = Artwork(md5: publicData["md5_image"].stringValue ?? "", kind: .cover)
         trackCount = publicData["nb_tracks"].intValue ?? 0
         year = String((publicData["release_date"].stringValue ?? "").prefix(4))
         explicit = publicData["explicit_lyrics"].boolValue ?? false
@@ -82,7 +82,7 @@ public struct AlbumSummary: Sendable, Identifiable, Equatable, Hashable {
 public struct ArtistSummary: Sendable, Identifiable, Equatable, Hashable {
     public var id: String
     public var name: String
-    public var picture: Picture
+    public var picture: Artwork
     public var fans: Int
     public var albumCount: Int
 
@@ -91,7 +91,7 @@ public struct ArtistSummary: Sendable, Identifiable, Equatable, Hashable {
     init(gateway: JSONValue) {
         id = gateway["ART_ID"].stringValue ?? "0"
         name = gateway["ART_NAME"].stringValue ?? ""
-        picture = Picture(md5: gateway["ART_PICTURE"].stringValue ?? "", kind: .artist)
+        picture = Artwork(md5: gateway["ART_PICTURE"].stringValue ?? "", kind: .artist)
         fans = gateway["NB_FAN"].intValue ?? 0
         albumCount = gateway["NB_ALBUM"].intValue ?? 0
     }
@@ -101,7 +101,7 @@ public struct PlaylistSummary: Sendable, Identifiable, Equatable, Hashable {
     public var id: String
     public var title: String
     public var owner: String
-    public var picture: Picture
+    public var picture: Artwork
     public var trackCount: Int
     public var description: String
 
@@ -111,9 +111,9 @@ public struct PlaylistSummary: Sendable, Identifiable, Equatable, Hashable {
         id = gateway["PLAYLIST_ID"].stringValue ?? "0"
         title = gateway["TITLE"].stringValue ?? ""
         owner = gateway["PARENT_USERNAME"].stringValue ?? ""
-        picture = Picture(
+        picture = Artwork(
             md5: gateway["PLAYLIST_PICTURE"].stringValue ?? "",
-            kind: Picture.Kind(rawValue: gateway["PICTURE_TYPE"].stringValue ?? "playlist") ?? .playlist
+            kind: Artwork.Kind(rawValue: gateway["PICTURE_TYPE"].stringValue ?? "playlist") ?? .playlist
         )
         trackCount = gateway["NB_SONG"].intValue ?? 0
         description = gateway["DESCRIPTION"].stringValue ?? ""
@@ -123,7 +123,7 @@ public struct PlaylistSummary: Sendable, Identifiable, Equatable, Hashable {
         id = publicData["id"].stringValue ?? "0"
         title = publicData["title"].stringValue ?? ""
         owner = publicData["user"]["name"].stringValue ?? ""
-        picture = Picture(md5: publicData["md5_image"].stringValue ?? "", kind: .playlist)
+        picture = Artwork(md5: publicData["md5_image"].stringValue ?? "", kind: .playlist)
         trackCount = publicData["nb_tracks"].intValue ?? 0
         description = publicData["description"].stringValue ?? ""
     }
@@ -161,4 +161,12 @@ public struct ArtistDetail: Sendable, Equatable {
     public var biography: String
     public var topTracks: [TrackSummary]
     public var albums: [ArtistTab: [AlbumSummary]]
+}
+
+public struct TrackDetail: Sendable, Equatable {
+    public var summary: TrackSummary
+    public var isrc: String
+    public var bpm: Double
+    public var releaseDate: String
+    public var availableFormats: [TrackFormat]
 }

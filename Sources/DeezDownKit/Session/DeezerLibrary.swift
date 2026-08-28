@@ -73,6 +73,29 @@ public struct DeezerLibrary: Sendable {
         )
     }
 
+    public func track(id rawID: String) async throws -> TrackDetail {
+        var id = rawID
+        if id.hasPrefix("isrc:") {
+            let results = try await session.publicTrack(isrc: String(id.dropFirst(5)))
+            guard let resolved = results["id"].stringValue, resolved != "0" else {
+                throw DownloadFailure(.notOnDeezer)
+            }
+            id = resolved
+        }
+        let gateway = try await session.trackData(id: id)
+        guard gateway["SNG_ID"].stringValue != nil else { throw DownloadFailure(.notOnDeezer) }
+        let publicData = try? await session.publicAPI("track/\(id)")
+
+        return TrackDetail(
+            summary: TrackSummary(gateway: gateway),
+            isrc: gateway["ISRC"].stringValue ?? "",
+            bpm: publicData?["bpm"].doubleValue ?? 0,
+            releaseDate: gateway["PHYSICAL_RELEASE_DATE"].stringValue
+                ?? gateway["DIGITAL_RELEASE_DATE"].stringValue ?? "",
+            availableFormats: TrackFormat.selectable.filter { (gateway[$0.filesizeKey].intValue ?? 0) > 0 }
+        )
+    }
+
     public func playlist(id: String) async throws -> PlaylistDetail {
         async let pageTask = session.playlistPage(id: id)
         async let entriesTask = session.playlistTracks(id: id)
@@ -154,7 +177,7 @@ public struct DeezerLibrary: Sendable {
 }
 
 extension String {
-    var strippingHTML: String {
+    public var strippingHTML: String {
         replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
             .decodingHTMLEntities
             .trimmingCharacters(in: .whitespacesAndNewlines)

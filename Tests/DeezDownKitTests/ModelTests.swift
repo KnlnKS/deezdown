@@ -57,7 +57,7 @@ func `featured artists are stripped from titles without eating real words`(input
 }
 
 @Test func `cover urls follow the deezer image cdn template`() throws {
-    let cover = Picture(md5: "5718f7c81c27e0b2417e2a4c45224f8a", kind: .cover)
+    let cover = Artwork(md5: "5718f7c81c27e0b2417e2a4c45224f8a", kind: .cover)
     #expect(
         cover.url(size: 800, format: .jpeg(quality: 90))?.absoluteString
             == "https://e-cdns-images.dzcdn.net/images/cover/5718f7c81c27e0b2417e2a4c45224f8a/800x800-000000-90-0-0.jpg"
@@ -66,7 +66,7 @@ func `featured artists are stripped from titles without eating real words`(input
         cover.url(size: 1200, format: .png)?.absoluteString
             == "https://e-cdns-images.dzcdn.net/images/cover/5718f7c81c27e0b2417e2a4c45224f8a/1200x1200-none-100-0-0.png"
     )
-    #expect(Picture(md5: "", kind: .cover).url(size: 800, format: .png) == nil)
+    #expect(Artwork(md5: "", kind: .cover).url(size: 800, format: .png) == nil)
 }
 
 @Test func `gateway values decode leniently whether deezer sends strings or numbers`() {

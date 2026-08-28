@@ -1,0 +1,124 @@
+import DeezDownKit
+import SwiftUI
+
+struct AlbumScreen: View {
+    @Environment(AppModel.self) private var model
+    var id: String
+
+    @State private var state: LoadState<AlbumDetail> = .loading
+    @State private var selection: Set<TrackSummary.ID> = []
+
+    var body: some View {
+        AsyncContent(state: state, retry: { Task { await load() } }) { detail in
+            VStack(spacing: 0) {
+                List(selection: $selection) {
+                    Section {
+                        ForEach(rows(detail), id: \.id) { row in
+                            switch row.kind {
+                            case .disc(let number): DiscHeader(number: number).selectionDisabled()
+                            case .track(let track, let index):
+                                TrackRow(track: track, index: index).tag(track.id)
+                            }
+                        }
+                    } header: {
+                        AlbumHeader(detail: detail)
+                    }
+                }
+                .listStyle(.inset)
+                SelectionFooter(tracks: detail.tracks, selection: selection)
+            }
+            .animation(Motion.standard, value: selection.isEmpty)
+        }
+        .navigationTitle(title)
+        .task(id: id) { await load() }
+    }
+
+    private var title: String {
+        if case .loaded(let detail) = state { return detail.summary.title }
+        return "Album"
+    }
+
+    private struct Row: Identifiable {
+        enum Kind {
+            case disc(Int)
+            case track(TrackSummary, Int)
+        }
+        var id: String
+        var kind: Kind
+    }
+
+    private func rows(_ detail: AlbumDetail) -> [Row] {
+        var rows: [Row] = []
+        var lastDisc = 0
+        for track in detail.tracks {
+            if detail.discTotal > 1, track.discNumber != lastDisc {
+                lastDisc = track.discNumber
+                rows.append(Row(id: "disc-\(lastDisc)", kind: .disc(lastDisc)))
+            }
+            rows.append(Row(id: track.id, kind: .track(track, track.position ?? 0)))
+        }
+        return rows
+    }
+
+    private func load() async {
+        state = .loading
+        do {
+            state = .loaded(try await model.library.album(id: id))
+        } catch {
+            state = .failed(model.message(for: error))
+        }
+    }
+}
+
+private struct AlbumHeader: View {
+    var detail: AlbumDetail
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 20) {
+            ArtworkView(picture: detail.summary.cover, side: 168, corner: Metrics.cardCorner)
+                .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(detail.summary.recordType.displayName.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .tracking(0.8)
+                    .foregroundStyle(.brand)
+
+                HStack(spacing: 8) {
+                    Text(detail.summary.title)
+                        .font(.system(size: 30, weight: .bold))
+                        .tracking(-0.6)
+                        .lineLimit(2)
+                    if detail.summary.explicit { ExplicitBadge() }
+                }
+
+                NavigationLink(value: Route.artist(detail.summary.artistID)) {
+                    Text(detail.summary.artist).font(.title3.weight(.medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+
+                Text(metadata)
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+
+                DownloadButton(link: detail.summary.link, title: "Download Album")
+                    .padding(.top, 6)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 18)
+        .textCase(nil)
+        .foregroundStyle(.primary)
+    }
+
+    private var metadata: String {
+        var parts: [String] = []
+        if !detail.summary.year.isEmpty { parts.append(detail.summary.year) }
+        parts.append("\(detail.tracks.count) track\(detail.tracks.count == 1 ? "" : "s")")
+        parts.append(detail.duration.formattedDuration)
+        if let genre = detail.genres.first { parts.append(genre) }
+        if !detail.label.isEmpty { parts.append(detail.label) }
+        return parts.joined(separator: " · ")
+    }
+}

@@ -24,7 +24,7 @@ public struct QueueItem: Sendable, Codable, Equatable, Identifiable {
     public var link: DeezerLink
     public var title: String
     public var subtitle: String
-    public var cover: Picture
+    public var cover: Artwork
     public var format: TrackFormat
     public var status: QueueStatus
     public var totalTracks: Int
@@ -35,7 +35,7 @@ public struct QueueItem: Sendable, Codable, Equatable, Identifiable {
     public var destination: URL?
     public var addedAt: Date
 
-    public init(id: String, link: DeezerLink, title: String, subtitle: String, cover: Picture, format: TrackFormat) {
+    public init(id: String, link: DeezerLink, title: String, subtitle: String, cover: Artwork, format: TrackFormat) {
         self.id = id
         self.link = link
         self.title = title

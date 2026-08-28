@@ -12,7 +12,7 @@ public enum ImageFormat: Sendable, Equatable {
     }
 }
 
-public struct Picture: Sendable, Codable, Equatable, Hashable {
+public struct Artwork: Sendable, Codable, Equatable, Hashable {
     public enum Kind: String, Sendable, Codable {
         case cover, artist, playlist, user, talk, misc
     }

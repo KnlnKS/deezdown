@@ -1,0 +1,49 @@
+import AVFoundation
+import DeezDownKit
+import Observation
+import SwiftUI
+
+/// Deezer's 30-second preview clips are unencrypted MP3s, so AVPlayer can take them directly.
+@Observable
+final class PreviewPlayer {
+    private(set) var playingTrackID: String?
+    var volume: Double = 0.8 {
+        didSet { player.volume = Float(volume) }
+    }
+
+    private let player = AVPlayer()
+    private var endObserver: (any NSObjectProtocol)?
+
+    init() {
+        player.volume = Float(volume)
+    }
+
+    func isPlaying(_ trackID: String) -> Bool { playingTrackID == trackID }
+
+    func toggle(_ track: TrackSummary) {
+        if playingTrackID == track.id {
+            stop()
+        } else if let url = track.previewURL {
+            play(url, trackID: track.id)
+        }
+    }
+
+    private func play(_ url: URL, trackID: String) {
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        let item = AVPlayerItem(url: url)
+        player.replaceCurrentItem(with: item)
+        player.play()
+        playingTrackID = trackID
+        endObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stop() }
+        }
+    }
+
+    func stop() {
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        playingTrackID = nil
+    }
+}

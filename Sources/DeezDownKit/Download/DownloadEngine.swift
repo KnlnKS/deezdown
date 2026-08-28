@@ -106,14 +106,14 @@ public actor DownloadEngine {
         var link: DeezerLink
         var title: String
         var subtitle: String
-        var cover: Picture
+        var cover: Artwork
         var trackCount: Int
     }
 
     /// Artist links become one queue entry per album, resolved cheaply from the discography.
     private func expand(_ link: DeezerLink) async throws -> [PendingLink] {
         guard case .artist(let id, let tab) = link else {
-            return [PendingLink(link: link, title: "Loading…", subtitle: "", cover: Picture(md5: "", kind: .cover), trackCount: 0)]
+            return [PendingLink(link: link, title: "Loading…", subtitle: "", cover: Artwork(md5: "", kind: .cover), trackCount: 0)]
         }
         let resolver = LinkResolver(session: session, settings: settings)
         let collections = try await resolver.resolve(.artist(id, tab: tab))
@@ -253,7 +253,7 @@ public actor DownloadEngine {
             let artwork =
                 settings.tags.cover
                 ? await artworkStore.image(
-                    collection.cover, size: Picture.clamped(settings.embeddedArtworkSize),
+                    collection.cover, size: Artwork.clamped(settings.embeddedArtworkSize),
                     format: settings.embeddedArtworkFormat)
                 : nil
 
@@ -498,7 +498,7 @@ public actor DownloadEngine {
             for format in settings.localArtworkFormats {
                 if let data = await artworkStore.image(
                     state.collection.cover,
-                    size: Picture.clamped(settings.localArtworkSize),
+                    size: Artwork.clamped(settings.localArtworkSize),
                     format: format
                 ) {
                     try? data.write(
@@ -518,7 +518,7 @@ public actor DownloadEngine {
             )
             if let data = await artworkStore.image(
                 firstTrack.album.mainArtist.picture,
-                size: Picture.clamped(settings.localArtworkSize),
+                size: Artwork.clamped(settings.localArtworkSize),
                 format: .jpeg(quality: settings.jpegImageQuality)
             ) {
                 try? data.write(to: artistDirectory.appending(path: "\(name).jpg"))

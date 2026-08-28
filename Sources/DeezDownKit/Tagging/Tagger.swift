@@ -229,10 +229,10 @@ public enum Tagger {
         }
         if tags.rating { add("RATING", "\(Int((Double(track.rank) / 10000).rounded()))") }
 
-        let picture = (tags.cover ? artwork : nil).flatMap { data -> FLACTagWriter.Picture? in
+        let picture = (tags.cover ? artwork : nil).flatMap { data -> FLACTagWriter.EmbeddedImage? in
             data.isEmpty
                 ? nil
-                : FLACTagWriter.Picture(
+                : FLACTagWriter.EmbeddedImage(
                     data: data, mimeType: ID3v2Writer.mimeType(for: data), description: "cover")
         }
         try FLACTagWriter.write(comments: comments, picture: picture, to: url)

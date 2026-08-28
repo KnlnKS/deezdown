@@ -41,7 +41,7 @@ public struct Album: Sendable, Codable, Equatable, Identifiable {
     public var mainArtist: ArtistRef
     public var artistRefs: [ArtistRef]
     public var artists: [String]
-    public var cover: Picture
+    public var cover: Artwork
     public var genres: [String]
     public var label: String
     public var barcode: String
@@ -59,7 +59,7 @@ public struct Album: Sendable, Codable, Equatable, Identifiable {
 
     public init(
         id: String, title: String, version: String = "", mainArtist: ArtistRef, artistRefs: [ArtistRef] = [],
-        artists: [String] = [], cover: Picture = Picture(md5: "", kind: .cover), genres: [String] = [],
+        artists: [String] = [], cover: Artwork = Artwork(md5: "", kind: .cover), genres: [String] = [],
         label: String = "Unknown", barcode: String = "Unknown", copyright: String = "",
         recordType: RecordType = .album, date: CustomDate? = nil, trackTotal: Int = 0, discTotal: Int = 1,
         explicit: Bool = false
@@ -92,7 +92,7 @@ public struct Album: Sendable, Codable, Equatable, Identifiable {
         mainArtist = main
         artistRefs = refs.isEmpty ? [main] : refs
         artists = Album.orderedNames(from: artistRefs)
-        cover = Picture(
+        cover = Artwork(
             md5: gateway["ALB_PICTURE"].stringValue ?? publicData["md5_image"].stringValue ?? "",
             kind: .cover
         )
