@@ -51,7 +51,8 @@ struct TrackRow: View {
             DownloadIconButton(link: track.link)
                 .opacity(hovering ? 1 : 0.35)
         }
-        .frame(height: showsArtwork ? 44 : 30)
+        .frame(height: showsArtwork ? 44 : 32)
+        .padding(.vertical, 2)
         .contentShape(.rect)
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: hovering)
@@ -104,6 +105,16 @@ struct TrackRow: View {
             .frame(width: size, height: size)
             .help(isPlaying ? "Stop preview" : "Play a 30 second preview")
         }
+    }
+}
+
+extension View {
+    /// Lines a list row up with the gutter every scrolling screen uses; the inset list style
+    /// supplies the rest.
+    func trackRowInsets() -> some View {
+        listRowInsets(
+            EdgeInsets(top: 0, leading: Metrics.listGutter, bottom: 0, trailing: Metrics.listGutter)
+        )
     }
 }
 

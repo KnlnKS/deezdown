@@ -15,9 +15,12 @@ struct AlbumScreen: View {
                     Section {
                         ForEach(rows(detail), id: \.id) { row in
                             switch row.kind {
-                            case .disc(let number): DiscHeader(number: number).selectionDisabled()
+                            case .disc(let number):
+                                DiscHeader(number: number).selectionDisabled().trackRowInsets()
                             case .track(let track, let index):
-                                TrackRow(track: track, index: index, showsArtist: false).tag(track.id)
+                                TrackRow(track: track, index: index, showsArtist: false)
+                                    .tag(track.id)
+                                    .trackRowInsets()
                             }
                         }
                     } header: {
@@ -106,6 +109,7 @@ private struct AlbumHeader: View {
             }
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, Metrics.listGutter)
         .padding(.vertical, 18)
         .textCase(nil)
         .foregroundStyle(.primary)

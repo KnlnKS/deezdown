@@ -29,30 +29,28 @@ struct AsyncContent<Value, Content: View>: View {
     }
 }
 
+/// Columns are uncapped and unbounded in width so the grid always spans its container —
+/// a fixed maximum would leave a widening gutter on the trailing edge as the window grows.
 struct CardGrid<Item: Identifiable, Card: View>: View {
-    static var maximumColumns: Int { 6 }
-
     var items: [Item]
-    var minimum: CGFloat = 150
+    var minimum: CGFloat = 180
     @ViewBuilder var card: (Item) -> Card
 
     @State private var available: CGFloat = 0
 
     private var columns: Int {
         guard available > 0 else { return 4 }
-        let spacing: CGFloat = 18
-        let fits = Int((available + spacing) / (minimum + spacing))
-        return max(1, min(Self.maximumColumns, fits))
+        return max(2, Int((available + Metrics.cardGap) / (minimum + Metrics.cardGap)))
     }
 
     var body: some View {
         LazyVGrid(
             columns: Array(
-                repeating: GridItem(.flexible(maximum: 210), spacing: 18, alignment: .top),
+                repeating: GridItem(.flexible(), spacing: Metrics.cardGap, alignment: .top),
                 count: columns
             ),
             alignment: .leading,
-            spacing: 22
+            spacing: Metrics.cardGap + 6
         ) {
             ForEach(items) { item in card(item) }
         }
@@ -68,8 +66,7 @@ struct ScreenScroll<Content: View>: View {
             VStack(alignment: .leading, spacing: 28) {
                 content()
             }
-            .padding(.horizontal, Metrics.gutter)
-            .padding(.vertical, 22)
+            .padding(Metrics.gutter)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollBounceBehavior(.basedOnSize)

@@ -48,5 +48,8 @@ enum Metrics {
     static let cardCorner: CGFloat = 12
     static let artworkCorner: CGFloat = 8
     static let rowHeight: CGFloat = 38
-    static let gutter: CGFloat = 32
+    static let gutter: CGFloat = 28
+    static let cardGap: CGFloat = 18
+    /// The inset list style already indents its rows; this tops them up to the page gutter.
+    static let listGutter: CGFloat = 18
 }

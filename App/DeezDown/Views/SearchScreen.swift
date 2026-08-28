@@ -75,7 +75,7 @@ struct SearchScreen: View {
         }
         .padding(.horizontal, Metrics.gutter)
         .padding(.top, 16)
-        .padding(.bottom, 14)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -161,14 +161,10 @@ struct SearchScreen: View {
         pagedGrid(playlists.hasMore, count: playlists.items.count) { playlistGrid(playlists.items) }
     }
 
-    private func pagedGrid(_ hasMore: Bool, count: Int, @ViewBuilder grid: () -> some View) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                grid()
-                loadMoreFooter(hasMore, count: count)
-            }
-            .padding(Metrics.gutter)
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private func pagedGrid(_ hasMore: Bool, count: Int, @ViewBuilder grid: @escaping () -> some View) -> some View {
+        ScreenScroll {
+            grid()
+            loadMoreFooter(hasMore, count: count)
         }
     }
 

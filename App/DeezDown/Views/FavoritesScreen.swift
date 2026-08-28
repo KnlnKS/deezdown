@@ -17,6 +17,7 @@ struct FavoritesScreen: View {
             UnderlineTabs(selection: $tab, options: Tab.allCases.map { ($0, $0.title) })
                 .padding(.horizontal, Metrics.gutter)
                 .padding(.top, 16)
+                .padding(.bottom, 8)
             Divider()
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -51,6 +52,7 @@ struct FavoritesScreen: View {
                     List {
                         ForEach(Array(results.tracks.enumerated()), id: \.element.id) { index, track in
                             TrackRow(track: track, index: index + 1, showsArtwork: true, showsAlbum: true)
+                                .trackRowInsets()
                         }
                     }
                     .listStyle(.inset)

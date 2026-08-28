@@ -16,6 +16,7 @@ struct PlaylistScreen: View {
                         ForEach(Array(detail.tracks.enumerated()), id: \.element.id) { index, track in
                             TrackRow(track: track, index: index + 1, showsArtwork: true, showsAlbum: true)
                                 .tag(track.id)
+                                .trackRowInsets()
                         }
                     } header: {
                         PlaylistHeader(detail: detail)
@@ -75,6 +76,7 @@ private struct PlaylistHeader: View {
             }
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, Metrics.listGutter)
         .padding(.vertical, 18)
         .textCase(nil)
         .foregroundStyle(.primary)
