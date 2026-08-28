@@ -34,6 +34,8 @@ struct AsyncContent<Value, Content: View>: View {
 struct CardGrid<Item: Identifiable, Card: View>: View {
     var items: [Item]
     var minimum: CGFloat = 180
+    /// Trims the tail so a section never ends in a part-filled row.
+    var rows: Int?
     @ViewBuilder var card: (Item) -> Card
 
     @State private var available: CGFloat = 0
@@ -41,6 +43,11 @@ struct CardGrid<Item: Identifiable, Card: View>: View {
     private var columns: Int {
         guard available > 0 else { return 4 }
         return max(2, Int((available + Metrics.cardGap) / (minimum + Metrics.cardGap)))
+    }
+
+    private var shown: [Item] {
+        guard let rows else { return items }
+        return Array(items.prefix(columns * rows))
     }
 
     var body: some View {
@@ -52,7 +59,7 @@ struct CardGrid<Item: Identifiable, Card: View>: View {
             alignment: .leading,
             spacing: Metrics.cardGap + 6
         ) {
-            ForEach(items) { item in card(item) }
+            ForEach(shown) { item in card(item) }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { available = $0 }
     }
