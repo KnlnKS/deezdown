@@ -46,17 +46,19 @@ actor ArtworkLoader {
     }
 }
 
-struct ArtworkView: View {
+/// The art itself, wherever it appears: one load, one placeholder, one well, one hairline.
+/// Callers differ only in whether they fix the size or let the layout decide.
+private struct ArtworkContent<Outline: InsettableShape>: View {
     var picture: Artwork
-    var side: CGFloat
-    var corner: CGFloat = Metrics.artworkCorner
+    var shape: Outline
+    var requestedSize: Int
+    var placeholderSize: CGFloat
+    var fillsContainer = false
 
     @State private var image: NSImage?
-    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
-        RoundedRectangle(cornerRadius: corner, style: .continuous)
-            .fill(Color.sunken)
+        well
             .overlay {
                 if let image {
                     Image(nsImage: image)
@@ -65,22 +67,43 @@ struct ArtworkView: View {
                         .transition(.opacity)
                 } else {
                     Image(systemName: picture.kind == .artist ? "music.mic" : "music.note")
-                        .font(.system(size: side * 0.3, weight: .light))
+                        .font(.system(size: placeholderSize, weight: .light))
                         .foregroundStyle(.tertiary)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
-            }
-            .frame(width: side, height: side)
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(Color.primary.opacity(0.06), lineWidth: 1) }
             .animation(Motion.quick, value: image != nil)
             .task(id: picture) {
-                image = await ArtworkLoader.shared.image(
-                    for: picture, size: Int(side * displayScale)
-                )
+                image = await ArtworkLoader.shared.image(for: picture, size: requestedSize)
             }
+    }
+
+    @ViewBuilder
+    private var well: some View {
+        if fillsContainer {
+            shape.fill(Color.sunken).aspectRatio(1, contentMode: .fit)
+        } else {
+            shape.fill(Color.sunken)
+        }
+    }
+}
+
+struct ArtworkView: View {
+    var picture: Artwork
+    var side: CGFloat
+    var corner: CGFloat = Metrics.artworkCorner
+
+    @Environment(\.displayScale) private var displayScale
+
+    var body: some View {
+        ArtworkContent(
+            picture: picture,
+            shape: RoundedRectangle(cornerRadius: corner, style: .continuous),
+            requestedSize: Int(side * displayScale),
+            placeholderSize: side * 0.3
+        )
+        .frame(width: side, height: side)
     }
 }
 
@@ -99,35 +122,18 @@ struct FillingArtworkView: View {
     var picture: Artwork
     var isCircular = false
 
-    @State private var image: NSImage?
-
-    private var shape: AnyShape {
-        isCircular
-            ? AnyShape(Circle())
-            : AnyShape(RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous))
-    }
-
     var body: some View {
-        shape
-            .fill(Color.sunken)
-            .aspectRatio(1, contentMode: .fit)
-            .overlay {
-                if let image {
-                    Image(nsImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .transition(.opacity)
-                } else {
-                    Image(systemName: picture.kind == .artist ? "music.mic" : "music.note")
-                        .font(.system(size: 34, weight: .light))
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .clipShape(shape)
-            .overlay { shape.stroke(Color.primary.opacity(0.06), lineWidth: 1) }
-            .animation(Motion.quick, value: image != nil)
-            .task(id: picture) {
-                image = await ArtworkLoader.shared.image(for: picture, size: 500)
-            }
+        if isCircular {
+            ArtworkContent(
+                picture: picture, shape: Circle(), requestedSize: 500,
+                placeholderSize: 34, fillsContainer: true
+            )
+        } else {
+            ArtworkContent(
+                picture: picture,
+                shape: RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous),
+                requestedSize: 500, placeholderSize: 34, fillsContainer: true
+            )
+        }
     }
 }
