@@ -244,56 +244,39 @@ struct SearchScreen: View {
     private func loadMore() async {
         let text = trimmed
         guard !text.isEmpty else { return }
+        let library = model.library
+        switch tab {
+        case .all: break
+        case .tracks: await extend(tracks, text, { tracks = $0 }, library.searchTracks)
+        case .albums: await extend(albums, text, { albums = $0 }, library.searchAlbums)
+        case .artists: await extend(artists, text, { artists = $0 }, library.searchArtists)
+        case .playlists: await extend(playlists, text, { playlists = $0 }, library.searchPlaylists)
+        }
+    }
+
+    /// Every tab pages the same way; only the endpoint it asks differs.
+    private func extend<Item>(
+        _ page: Page<Item>,
+        _ query: String,
+        _ store: (Page<Item>) -> Void,
+        _ fetch: (String, Int, Int) async throws -> ([Item], Int)
+    ) async {
+        guard !page.isLoading, page.hasMore else { return }
+        var page = page
+        page.isLoading = true
+        store(page)
 
         do {
-            switch tab {
-            case .all:
-                return
-            case .tracks:
-                guard !tracks.isLoading, tracks.hasMore else { return }
-                tracks.isLoading = true
-                let (items, total) = try await model.library.searchTracks(
-                    text, start: tracks.items.count, limit: Page<TrackSummary>.size
-                )
-                guard text == trimmed else { return }
-                tracks.append(items, total: total)
-            case .albums:
-                guard !albums.isLoading, albums.hasMore else { return }
-                albums.isLoading = true
-                let (items, total) = try await model.library.searchAlbums(
-                    text, start: albums.items.count, limit: Page<AlbumSummary>.size
-                )
-                guard text == trimmed else { return }
-                albums.append(items, total: total)
-            case .artists:
-                guard !artists.isLoading, artists.hasMore else { return }
-                artists.isLoading = true
-                let (items, total) = try await model.library.searchArtists(
-                    text, start: artists.items.count, limit: Page<ArtistSummary>.size
-                )
-                guard text == trimmed else { return }
-                artists.append(items, total: total)
-            case .playlists:
-                guard !playlists.isLoading, playlists.hasMore else { return }
-                playlists.isLoading = true
-                let (items, total) = try await model.library.searchPlaylists(
-                    text, start: playlists.items.count, limit: Page<PlaylistSummary>.size
-                )
-                guard text == trimmed else { return }
-                playlists.append(items, total: total)
-            }
+            let (items, total) = try await fetch(query, page.items.count, Page<Item>.size)
+            guard query == trimmed else { return }
+            page.append(items, total: total)
         } catch {
             // A failed page ends the run rather than spinning forever.
-            tracks.isExhausted = tab == .tracks || tracks.isExhausted
-            albums.isExhausted = tab == .albums || albums.isExhausted
-            artists.isExhausted = tab == .artists || artists.isExhausted
-            playlists.isExhausted = tab == .playlists || playlists.isExhausted
-            tracks.isLoading = false
-            albums.isLoading = false
-            artists.isLoading = false
-            playlists.isLoading = false
+            page.isExhausted = true
+            page.isLoading = false
             model.show(Toast(message: model.message(for: error), kind: .failure))
         }
+        store(page)
     }
 }
 
