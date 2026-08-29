@@ -165,7 +165,7 @@ final class AppModel {
         }
     }
 
-    func enqueue(pasted text: String) async {
+    func enqueue(pasted text: String, format: TrackFormat? = nil) async {
         var links: [DeezerLink] = []
         for candidate in LinkParser.split(text) {
             do {
@@ -174,7 +174,7 @@ final class AppModel {
                 show(Toast(message: message(for: error), kind: .failure))
             }
         }
-        await enqueue(links)
+        await enqueue(links, format: format)
     }
 
     func pause(_ id: String) { Task { await engine?.pause(id) } }

@@ -68,13 +68,7 @@ struct AddLinkSheet: View {
         let input = text
         let chosen = format
         Task {
-            for candidate in LinkParser.split(input) {
-                do {
-                    await model.enqueue(try await LinkParser.resolve(candidate), format: chosen)
-                } catch {
-                    model.show(Toast(message: model.message(for: error), kind: .failure))
-                }
-            }
+            await model.enqueue(pasted: input, format: chosen)
             dismiss()
         }
     }
