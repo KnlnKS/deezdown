@@ -154,10 +154,9 @@ public struct LinkResolver: Sendable {
         )
     }
 
-    private func resolveArtist(_ id: String, tab: ArtistTab, link: DeezerLink) async throws
-        -> [ResolvedCollection]
-    {
-        let artist = ArtistRef(gateway: try await session.artistData(id: id))
+    /// The albums an artist's tab covers, as the discography already describes them. One
+    /// request, and enough to name a queue entry — reading each tracklist is the queue's job.
+    public func artistAlbums(_ id: String, tab: ArtistTab) async throws -> [AlbumSummary] {
         let discography = try await session.artistDiscography(id: id)
         let selected = discography.filter { entry in
             let isOfficial = entry["ARTISTS_ALBUMS_IS_OFFICIAL"].boolValue ?? false
@@ -171,13 +170,18 @@ public struct LinkResolver: Sendable {
             }
         }
         guard !selected.isEmpty else { throw DownloadFailure(.albumMissing) }
+        return selected.map(AlbumSummary.init(gateway:))
+    }
 
+    private func resolveArtist(_ id: String, tab: ArtistTab, link: DeezerLink) async throws
+        -> [ResolvedCollection]
+    {
+        let artist = ArtistRef(gateway: try await session.artistData(id: id))
         var collections: [ResolvedCollection] = []
-        for entry in selected {
-            guard let albumID = entry["ALB_ID"].stringValue else { continue }
+        for album in try await artistAlbums(id, tab: tab) {
             guard
                 let collection = try? await resolveAlbum(
-                    albumID, link: .album(albumID), rootArtist: artist
+                    album.id, link: .album(album.id), rootArtist: artist
                 )
             else { continue }
             collections.append(collection)
