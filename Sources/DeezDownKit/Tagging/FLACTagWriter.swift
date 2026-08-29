@@ -57,23 +57,7 @@ enum FLACTagWriter {
             header.append(block.1)
         }
 
-        let rewritten = url.appendingPathExtension("retag")
-        let manager = FileManager.default
-        if manager.fileExists(atPath: rewritten.path(percentEncoded: false)) {
-            try manager.removeItem(at: rewritten)
-        }
-        guard manager.createFile(atPath: rewritten.path(percentEncoded: false), contents: header) else {
-            throw MalformedFLAC()
-        }
-        let output = try FileHandle(forWritingTo: rewritten)
-        try output.seekToEnd()
-        try handle.seek(toOffset: audioOffset)
-        while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
-            try output.write(contentsOf: chunk)
-        }
-        try output.close()
-
-        _ = try manager.replaceItemAt(url, withItemAt: rewritten)
+        try TagRewriter.rewrite(url, reading: handle, header: header, audioFrom: audioOffset)
     }
 
     private static func littleEndian(_ value: Int) -> [UInt8] {

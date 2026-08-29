@@ -125,7 +125,7 @@ public enum Tagger {
         try rewrite(url, prefix: writer.data(), suffix: trailer)
     }
 
-    /// Replaces any existing ID3v1/ID3v2 wrapper without loading the audio into memory.
+    /// Replaces any existing ID3v1/ID3v2 wrapper.
     static func rewrite(_ url: URL, prefix: Data, suffix: Data) throws {
         let handle = try FileHandle(forUpdating: url)
         defer { try? handle.close() }
@@ -144,27 +144,10 @@ public enum Tagger {
             }
         }
 
-        let rewritten = url.appendingPathExtension("retag")
-        let manager = FileManager.default
-        if manager.fileExists(atPath: rewritten.path(percentEncoded: false)) {
-            try manager.removeItem(at: rewritten)
-        }
-        guard manager.createFile(atPath: rewritten.path(percentEncoded: false), contents: prefix) else {
-            throw DownloadFailure(.tagging("could not create the tagged file"))
-        }
-        let output = try FileHandle(forWritingTo: rewritten)
-        try output.seekToEnd()
-        try handle.seek(toOffset: audioStart)
-
-        var remaining = Int(audioEnd - audioStart)
-        while remaining > 0, let chunk = try handle.read(upToCount: min(remaining, 1 << 20)), !chunk.isEmpty {
-            try output.write(contentsOf: chunk)
-            remaining -= chunk.count
-        }
-        if !suffix.isEmpty { try output.write(contentsOf: suffix) }
-        try output.close()
-
-        _ = try manager.replaceItemAt(url, withItemAt: rewritten)
+        try TagRewriter.rewrite(
+            url, reading: handle, header: prefix,
+            audioFrom: audioStart, audioTo: audioEnd, trailer: suffix
+        )
     }
 
     // MARK: - FLAC
