@@ -11,28 +11,23 @@ struct HomeScreen: View {
                 greeting
 
                 if !feed.history.isEmpty {
-                    SectionHeader("Last Streamed by You")
-                    CardGrid(items: feed.history, rows: 2) { MediaCard($0) }
+                    CardShelf("Last Streamed by You", items: feed.history, rows: 2) { MediaCard($0) }
                 }
 
                 if !feed.playlists.isEmpty {
-                    SectionHeader("Your Playlists")
-                    CardGrid(items: feed.playlists, rows: 1) { MediaCard($0) }
+                    CardShelf("Your Playlists", items: feed.playlists, rows: 1) { MediaCard($0) }
                 }
 
                 if !feed.artists.isEmpty {
-                    SectionHeader("Artists You Follow")
-                    CardGrid(items: feed.artists, rows: 1) { MediaCard($0) }
+                    CardShelf("Artists You Follow", items: feed.artists, rows: 1) { MediaCard($0) }
                 }
 
                 if !feed.topAlbums.isEmpty {
-                    SectionHeader("Most Streamed Albums")
-                    CardGrid(items: feed.topAlbums, rows: 2) { MediaCard($0) }
+                    CardShelf("Most Streamed Albums", items: feed.topAlbums, rows: 2) { MediaCard($0) }
                 }
 
                 if !feed.topPlaylists.isEmpty {
-                    SectionHeader("Popular Playlists")
-                    CardGrid(items: feed.topPlaylists, rows: 1) { MediaCard($0, subtitle: $0.owner) }
+                    CardShelf("Popular Playlists", items: feed.topPlaylists, rows: 1) { MediaCard($0, subtitle: $0.owner) }
                 }
             }
         }
