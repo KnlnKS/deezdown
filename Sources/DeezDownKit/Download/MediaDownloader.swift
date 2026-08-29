@@ -1,9 +1,8 @@
 import Foundation
 
-public struct MediaDownloader: Sendable {
-    public static let readBufferSize = 1 << 16
-
+public final class MediaDownloader: Sendable {
     private let urlSession: URLSession
+    private let bodies: ResponseBodies
 
     public init(maximumConnectionsPerHost: Int = 12) {
         let configuration = URLSessionConfiguration.ephemeral
@@ -11,7 +10,13 @@ public struct MediaDownloader: Sendable {
         configuration.httpMaximumConnectionsPerHost = maximumConnectionsPerHost
         configuration.timeoutIntervalForRequest = 20
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        urlSession = URLSession(configuration: configuration)
+        let bodies = ResponseBodies()
+        self.bodies = bodies
+        urlSession = URLSession(configuration: configuration, delegate: bodies, delegateQueue: nil)
+    }
+
+    deinit {
+        urlSession.finishTasksAndInvalidate()
     }
 
     /// Deezer only enciphers streams served from these paths.
@@ -48,7 +53,7 @@ public struct MediaDownloader: Sendable {
         to destination: URL,
         onProgress: (@Sendable (Int64, Int64) -> Void)?
     ) async throws -> Int64 {
-        let (bytes, response) = try await urlSession.bytes(from: url)
+        let (response, body) = try await bodies.start(urlSession.dataTask(with: url))
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw DownloadFailure(.network("HTTP \(http.statusCode)"))
         }
@@ -58,48 +63,35 @@ public struct MediaDownloader: Sendable {
         let partial = destination.appendingPathExtension("part")
         let manager = FileManager.default
         try manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if manager.fileExists(atPath: partial.path(percentEncoded: false)) {
-            try manager.removeItem(at: partial)
-        }
         guard manager.createFile(atPath: partial.path(percentEncoded: false), contents: nil) else {
             throw DownloadFailure(.noSpaceLeft)
         }
         let handle = try FileHandle(forWritingTo: partial)
 
         let decryptor = Self.isEncrypted(url) ? try StripeDecryptor(trackID: trackID) : nil
-        var buffer = [UInt8]()
-        buffer.reserveCapacity(Self.readBufferSize)
         var written: Int64 = 0
 
         do {
-            for try await byte in bytes {
-                buffer.append(byte)
-                if buffer.count == Self.readBufferSize {
-                    let output = try decryptor.map { try $0.consume(buffer) } ?? buffer
+            for try await chunk in body {
+                try Task.checkCancellation()
+                if let decryptor {
+                    let output = try decryptor.consume(chunk)
                     if !output.isEmpty { try handle.write(contentsOf: output) }
-                    written += Int64(buffer.count)
-                    buffer.removeAll(keepingCapacity: true)
-                    onProgress?(written, expected)
-                    try Task.checkCancellation()
+                } else {
+                    try handle.write(contentsOf: chunk)
                 }
-            }
-            if !buffer.isEmpty {
-                let output = try decryptor.map { try $0.consume(buffer) } ?? buffer
-                if !output.isEmpty { try handle.write(contentsOf: output) }
-                written += Int64(buffer.count)
+                written += Int64(chunk.count)
+                onProgress?(written, expected)
             }
             if let decryptor {
                 let tail = try decryptor.finish()
                 if !tail.isEmpty { try handle.write(contentsOf: tail) }
             }
             try handle.close()
-        } catch is CancellationError {
-            try? handle.close()
-            try? manager.removeItem(at: partial)
-            throw DownloadFailure(.canceled)
         } catch {
             try? handle.close()
             try? manager.removeItem(at: partial)
+            if error is CancellationError { throw DownloadFailure(.canceled) }
             throw DownloadFailure(.network(error.localizedDescription))
         }
 
