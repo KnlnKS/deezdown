@@ -35,6 +35,7 @@ public actor DownloadEngine {
     private var activeWorkers = 0
     private var directorRunning = false
     private var canceled: Set<String> = []
+    private var lastProgressPublish: ContinuousClock.Instant?
     private var observers: [UUID: AsyncStream<[QueueItem]>.Continuation] = [:]
 
     public init(session: DeezerSession, settings: DownloadSettings, paths: AppPaths = AppPaths()) {
@@ -474,11 +475,18 @@ public actor DownloadEngine {
         return (await bpm, await lyrics)
     }
 
+    /// Eight tracks reporting every percent is a few hundred snapshots a second, and the
+    /// screen can show one per frame. Whatever a tick drops, the next one carries, and
+    /// finishing a track always publishes.
     private func report(itemID: String, index: Int, fraction: Double) {
         guard states[itemID] != nil, var item = items[itemID], item.status == .downloading else { return }
         states[itemID]?.inFlight[index] = fraction
         item.progress = progress(for: itemID, item: item)
         items[itemID] = item
+
+        let now = ContinuousClock.now
+        if let last = lastProgressPublish, now - last < .milliseconds(50) { return }
+        lastProgressPublish = now
         publish()
     }
 

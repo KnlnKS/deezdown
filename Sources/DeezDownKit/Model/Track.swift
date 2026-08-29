@@ -209,16 +209,19 @@ extension Track {
             .map(\.element)
     }
 
+    /// Compiled once: `replacingOccurrences(options: .regularExpression)` builds all six
+    /// again for every track prepared.
+    static let featureMarkers: [NSRegularExpression] = [
+        #"\s*\(feat\.?[^)]*\)"#, #"\s*\(ft\.?[^)]*\)"#,
+        #"\s*\[feat\.?[^\]]*\]"#, #"\s*\[ft\.?[^\]]*\]"#,
+        #"\s+feat\.?\s.*$"#, #"\s+ft\.?\s.*$"#,
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
     static func removingFeatures(from title: String) -> String {
-        let patterns = [
-            #"\s*\(feat\.?[^)]*\)"#, #"\s*\(ft\.?[^)]*\)"#,
-            #"\s*\[feat\.?[^\]]*\]"#, #"\s*\[ft\.?[^\]]*\]"#,
-            #"\s+feat\.?\s.*$"#, #"\s+ft\.?\s.*$"#,
-        ]
         var output = title
-        for pattern in patterns {
-            output = output.replacingOccurrences(
-                of: pattern, with: "", options: [.regularExpression, .caseInsensitive]
+        for marker in featureMarkers {
+            output = marker.stringByReplacingMatches(
+                in: output, range: NSRange(output.startIndex..., in: output), withTemplate: ""
             )
         }
         return output.trimmingCharacters(in: .whitespaces)
