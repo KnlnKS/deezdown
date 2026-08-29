@@ -29,7 +29,7 @@ final class PreviewPlayer {
     }
 
     private func play(_ url: URL, trackID: String) {
-        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        forgetEndObserver()
         let item = AVPlayerItem(url: url)
         player.replaceCurrentItem(with: item)
         player.play()
@@ -42,8 +42,15 @@ final class PreviewPlayer {
     }
 
     func stop() {
+        forgetEndObserver()
         player.pause()
         player.replaceCurrentItem(with: nil)
         playingTrackID = nil
+    }
+
+    private func forgetEndObserver() {
+        guard let endObserver else { return }
+        NotificationCenter.default.removeObserver(endObserver)
+        self.endObserver = nil
     }
 }

@@ -131,16 +131,15 @@ struct Download: AsyncParsableCommand {
         let format = bitrate.flatMap(TrackFormat.parse)
         let engine = DownloadEngine(session: session, settings: settings, paths: options.paths)
 
-        var queued = 0
+        var parsed: [DeezerLink] = []
         for link in links.flatMap(LinkParser.split) {
             do {
-                let parsed = try await LinkParser.resolve(link)
-                queued += try await engine.enqueue(parsed, format: format).count
+                parsed.append(try await LinkParser.resolve(link))
             } catch {
                 FileHandle.standardError.write(Data("Skipping \(link): \(reason(error))\n".utf8))
             }
         }
-        guard queued > 0 else { throw ExitCode.failure }
+        guard try await engine.enqueue(parsed, format: format).count > 0 else { throw ExitCode.failure }
 
         let reporter = ProgressReporter()
         for await queue in await engine.events() {

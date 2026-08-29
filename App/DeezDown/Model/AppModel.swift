@@ -38,6 +38,7 @@ final class AppModel {
     private let settingsStore: SettingsStore
     private var engine: DownloadEngine?
     private var queueObserver: Task<Void, Never>?
+    private var settingsWrite: Task<Void, Never>?
 
     init() {
         credentials = CredentialStore(paths: paths)
@@ -80,6 +81,7 @@ final class AppModel {
     func signOut() {
         queueObserver?.cancel()
         queueObserver = nil
+        if let engine { Task { await engine.cancelAll() } }
         engine = nil
         queue = []
         cache.invalidate()
@@ -103,11 +105,19 @@ final class AppModel {
 
     // MARK: - Settings
 
+    /// Settings change on every keystroke in a template field, so the write is coalesced.
+    /// Repair runs on the copy that is stored rather than on the bindings themselves —
+    /// otherwise clearing a field to retype it refills with the default mid-word.
     func saveSettings() {
-        settings.repair()
-        try? settingsStore.save(settings)
-        let updated = settings
-        Task { await engine?.updateSettings(updated) }
+        var repaired = settings
+        repaired.repair()
+        settingsWrite?.cancel()
+        settingsWrite = Task { [settingsStore, engine] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            try? settingsStore.save(repaired)
+            await engine?.updateSettings(repaired)
+        }
     }
 
     func resetSettings() {

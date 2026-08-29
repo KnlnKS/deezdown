@@ -1,8 +1,7 @@
 import Foundation
-import Observation
 
 /// Browsing data changes slowly, so a tab switch reuses what was already fetched.
-@Observable
+/// Nothing observes the store itself: screens read it when they load, not while drawing.
 final class LibraryCache {
     static let lifetime: Duration = .seconds(600)
 
@@ -21,7 +20,9 @@ final class LibraryCache {
     }
 
     func store(_ value: some Any, for key: String) {
-        entries[key] = Entry(value: value, storedAt: .now)
+        let now = ContinuousClock.now
+        entries = entries.filter { now - $0.value.storedAt < Self.lifetime }
+        entries[key] = Entry(value: value, storedAt: now)
     }
 
     func invalidate(_ key: String? = nil) {

@@ -10,6 +10,8 @@ actor ArtworkLoader {
 
     init() {
         cache.countLimit = 400
+        // A grid of 500px covers is a megabyte each decoded; a count alone is not a budget.
+        cache.totalCostLimit = 256 << 20
         let configuration = URLSessionConfiguration.default
         configuration.httpMaximumConnectionsPerHost = 8
         configuration.requestCachePolicy = .returnCacheDataElseLoad
@@ -36,7 +38,10 @@ actor ArtworkLoader {
         inFlight[url] = task
         let image = await task.value
         inFlight[url] = nil
-        if let image { cache.setObject(image, forKey: url as NSURL) }
+        if let image {
+            let pixels = image.representations.first.map { $0.pixelsWide * $0.pixelsHigh } ?? 0
+            cache.setObject(image, forKey: url as NSURL, cost: pixels * 4)
+        }
         return image
     }
 }
