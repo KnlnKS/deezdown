@@ -43,7 +43,7 @@ struct SearchScreen: View {
     @State private var albums = Page<AlbumSummary>()
     @State private var artists = Page<ArtistSummary>()
     @State private var playlists = Page<PlaylistSummary>()
-    @State private var field = SearchFieldProxy()
+    @FocusState private var searchFocused: Bool
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
 
@@ -57,14 +57,16 @@ struct SearchScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle("Search")
-        .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in field.focus?() }
+        .onChange(of: model.command) { _, command in
+            if command?.kind == .findInSearch { searchFocused = true }
+        }
         .task(id: query) { await reload() }
         .task(id: tab) { await loadCurrentTab() }
     }
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SearchFieldHost(text: $query, proxy: $field, onSubmit: submit)
+            SearchField(text: $query, focused: $searchFocused, onSubmit: submit)
 
             if !trimmed.isEmpty {
                 UnderlineTabs(
@@ -286,18 +288,10 @@ enum SearchTab: String, CaseIterable, Identifiable {
     var title: String { rawValue.capitalized }
 }
 
-/// Lets the window's Find command reach the field that lives inside this screen.
-@Observable
-final class SearchFieldProxy {
-    var focus: (() -> Void)?
-}
-
-private struct SearchFieldHost: View {
+private struct SearchField: View {
     @Binding var text: String
-    @Binding var proxy: SearchFieldProxy
+    @FocusState.Binding var focused: Bool
     var onSubmit: () -> Void
-
-    @FocusState private var focused: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -326,9 +320,6 @@ private struct SearchFieldHost: View {
         }
         .frame(maxWidth: 520)
         .animation(Motion.quick, value: focused)
-        .onAppear {
-            proxy.focus = { focused = true }
-            focused = true
-        }
+        .onAppear { focused = true }
     }
 }

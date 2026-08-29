@@ -23,7 +23,16 @@ final class AppModel {
         }
     }
 
+    /// A menu command on its way to the window that can act on it. The id makes pressing
+    /// the same shortcut twice two separate events.
+    struct Command: Equatable {
+        enum Kind { case addLink, findInSearch, showDownloads }
+        var kind: Kind
+        var id = UUID()
+    }
+
     private(set) var signInState: SignInState = .signedOut
+    private(set) var command: Command?
     private(set) var queue: [QueueItem] = []
     var settings: DownloadSettings
     var toast: Toast?
@@ -178,6 +187,10 @@ final class AppModel {
 
     func revealDownloads() {
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: settings.downloadLocation)
+    }
+
+    func send(_ command: Command.Kind) {
+        self.command = Command(kind: command)
     }
 
     // MARK: - Feedback

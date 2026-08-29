@@ -13,9 +13,7 @@ struct DownloadsScreen: View {
                 } description: {
                     Text("Downloads you start will appear here.")
                 } actions: {
-                    Button("Add Link…") {
-                        NotificationCenter.default.post(name: .showAddLink, object: nil)
-                    }
+                    Button("Add Link…") { model.send(.addLink) }
                 }
             } else {
                 ScrollView {

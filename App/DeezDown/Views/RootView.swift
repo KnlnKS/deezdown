@@ -24,20 +24,20 @@ struct RootView: View {
         .background(Color.canvas)
         .tint(.brand)
         .overlay(alignment: .bottom) { ToastView(toast: model.toast) }
-        .onReceive(NotificationCenter.default.publisher(for: .showAddLink)) { _ in
-            showAddLink = model.isSignedIn
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
-            guard model.isSignedIn else { return }
-            section = .search
-            navigator.path = NavigationPath()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showDownloads)) { _ in
-            guard model.isSignedIn else { return }
-            section = .downloads
-            navigator.path = NavigationPath()
+        .onChange(of: model.command) { _, command in
+            guard let command, model.isSignedIn else { return }
+            switch command.kind {
+            case .addLink: showAddLink = true
+            case .findInSearch: show(.search)
+            case .showDownloads: show(.downloads)
+            }
         }
         .sheet(isPresented: $showAddLink) { AddLinkSheet() }
+    }
+
+    private func show(_ destination: SidebarSection) {
+        section = destination
+        navigator.path = NavigationPath()
     }
 
     private var browser: some View {

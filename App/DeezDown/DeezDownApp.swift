@@ -16,7 +16,7 @@ struct DeezDownApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             CommandGroup(after: .textEditing) {
-                Button("Find") { NotificationCenter.default.post(name: .focusSearch, object: nil) }
+                Button("Find") { model.send(.findInSearch) }
                     .keyboardShortcut("f", modifiers: .command)
             }
             SidebarCommands()
@@ -24,7 +24,7 @@ struct DeezDownApp: App {
             // Replacing New Item with an empty group makes SwiftUI treat the File menu as
             // trivial and trap while pruning it, so it carries a real command instead.
             CommandGroup(replacing: .newItem) {
-                Button("Add Link…") { NotificationCenter.default.post(name: .showAddLink, object: nil) }
+                Button("Add Link…") { model.send(.addLink) }
                     .keyboardShortcut("l", modifiers: .command)
             }
             CommandGroup(replacing: .help) {
@@ -51,9 +51,7 @@ struct DownloadCommands: Commands {
             }
             .keyboardShortcut("v", modifiers: [.command, .shift])
 
-            Button("Show Downloads") {
-                NotificationCenter.default.post(name: .showDownloads, object: nil)
-            }
+            Button("Show Downloads") { model.send(.showDownloads) }
             .keyboardShortcut("d", modifiers: [.command, .shift])
 
             Divider()
@@ -97,10 +95,4 @@ struct DownloadCommands: Commands {
             }
         )
     }
-}
-
-extension Notification.Name {
-    static let showAddLink = Notification.Name("DeezDown.showAddLink")
-    static let focusSearch = Notification.Name("DeezDown.focusSearch")
-    static let showDownloads = Notification.Name("DeezDown.showDownloads")
 }
