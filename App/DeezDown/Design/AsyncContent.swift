@@ -29,9 +29,12 @@ struct AsyncContent<Value, Content: View>: View {
     }
 }
 
-/// Columns are uncapped and unbounded in width so the grid always spans its container —
-/// a fixed maximum would leave a widening gutter on the trailing edge as the window grows.
+/// Columns are unbounded in width so the grid always spans its container — a fixed card
+/// width would leave a widening gutter on the trailing edge as the window grows. Their
+/// number is capped, so a wide window makes the artwork bigger rather than the rows longer.
 struct CardGrid<Item: Identifiable, Card: View>: View {
+    static var maximumColumns: Int { 6 }
+
     var items: [Item]
     var minimum: CGFloat = 180
     /// Trims the tail so a section never ends in a part-filled row.
@@ -42,7 +45,8 @@ struct CardGrid<Item: Identifiable, Card: View>: View {
 
     private var columns: Int {
         guard available > 0 else { return 4 }
-        return max(2, Int((available + Metrics.cardGap) / (minimum + Metrics.cardGap)))
+        let fitting = Int((available + Metrics.cardGap) / (minimum + Metrics.cardGap))
+        return min(max(2, fitting), Self.maximumColumns)
     }
 
     private var shown: [Item] {
