@@ -4,12 +4,14 @@ import Testing
 
 private let liveARL = ProcessInfo.processInfo.environment["DEEZDOWN_TEST_ARL"]
 
+/// Runs one of Homebrew's ffmpeg tools and returns everything it printed.
 @discardableResult
-private func ffmpegDecodes(_ url: URL) throws -> String {
+private func ffmpeg(_ tool: String, _ arguments: String...) throws -> String {
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
-    process.arguments = ["-v", "error", "-i", url.path(percentEncoded: false), "-f", "null", "-"]
+    process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/\(tool)")
+    process.arguments = arguments
     let pipe = Pipe()
+    process.standardOutput = pipe
     process.standardError = pipe
     try process.run()
     let output = pipe.fileHandleForReading.readDataToEndOfFile()
@@ -46,7 +48,7 @@ struct LiveDownload {
         let header = try FileHandle(forReadingFrom: destination).read(upToCount: 4)
         #expect(header == (format == .flac ? Data("fLaC".utf8) : Data([0xFF, 0xFB, 0xE0, 0x00])))
 
-        let errors = try ffmpegDecodes(destination)
+        let errors = try ffmpeg("ffmpeg", "-v", "error", "-i", destination.path(percentEncoded: false), "-f", "null", "-")
         #expect(errors.isEmpty, "ffmpeg reported: \(errors)")
 
         let megabytes = Double(written) / 1_000_000
@@ -68,25 +70,6 @@ struct LiveDownload {
         let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
         print("  resolved 14 tracks in \(String(format: "%.2f", seconds))s")
         #expect(seconds < 5)
-    }
-}
-
-private func ffprobeTags(_ url: URL) throws -> [String: String] {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffprobe")
-    process.arguments = [
-        "-v", "error", "-show_entries", "format_tags", "-of", "default=nw=1",
-        url.path(percentEncoded: false),
-    ]
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    try process.run()
-    let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-    process.waitUntilExit()
-    return output.split(separator: "\n").reduce(into: [:]) { result, line in
-        guard let split = line.firstIndex(of: "=") else { return }
-        let key = String(line[line.startIndex..<split]).replacingOccurrences(of: "TAG:", with: "")
-        result[key.lowercased()] = String(line[line.index(after: split)...])
     }
 }
 
@@ -123,10 +106,15 @@ struct LiveTagging {
         #expect(artwork?.isEmpty == false)
         try Tagger.tag(track, format: format, at: destination, artwork: artwork, settings: settings)
 
-        let errors = try ffmpegDecodes(destination)
+        let errors = try ffmpeg("ffmpeg", "-v", "error", "-i", destination.path(percentEncoded: false), "-f", "null", "-")
         #expect(errors.isEmpty, "ffmpeg reported: \(errors)")
 
-        let tags = try ffprobeTags(destination)
+        let tags = ffprobeTags(
+            try ffmpeg(
+                "ffprobe", "-v", "error", "-show_entries", "format_tags", "-of", "default=nw=1",
+                destination.path(percentEncoded: false)
+            )
+        )
         #expect(tags["title"] == "Harder, Better, Faster, Stronger")
         #expect(tags["album"] == "Discovery")
         #expect(tags["artist"]?.contains("Daft Punk") == true)
@@ -134,52 +122,20 @@ struct LiveTagging {
         #expect(tags["isrc"] == "GBDUW0000059" || tags["tsrc"] == "GBDUW0000059")
         #expect(tags["publisher"] != nil || tags["label"] != nil)
 
-        let streams = try ffprobeStreams(destination)
+        let streams = try ffmpeg(
+            "ffprobe", "-v", "error", "-show_entries", "stream=codec_name", "-of", "csv=p=0",
+            destination.path(percentEncoded: false)
+        )
         #expect(streams.contains(format == .flac ? "flac" : "mp3"), "wrong codec: \(streams)")
         #expect(streams.contains("mjpeg") || streams.contains("png"), "no embedded cover: \(streams)")
     }
 }
 
-private func ffprobeStreams(_ url: URL) throws -> String {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffprobe")
-    process.arguments = [
-        "-v", "error", "-show_entries", "stream=codec_name", "-of", "csv=p=0",
-        url.path(percentEncoded: false),
-    ]
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    try process.run()
-    let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-    process.waitUntilExit()
-    return output
-}
-
-@Suite(.enabled(if: ProcessInfo.processInfo.environment["DEEZDOWN_DUMP"] != nil), .serialized)
-struct TagDump {
-    @Test(arguments: [TrackFormat.flac, .mp3_320])
-    func `dump`(format: TrackFormat) async throws {
-        let session = DeezerSession()
-        try await session.login(arl: #require(liveARL))
-        var settings = DownloadSettings()
-        settings.tags.lyrics = true
-        settings.tags.replayGain = true
-        settings.tags.composer = true
-        settings.tags.involvedPeople = true
-        settings.tags.copyright = true
-        settings.tags.trackTotal = true
-        settings.tags.discTotal = true
-        var track = Track(gateway: try await session.trackData(id: "3135556"),
-                          album: Album(gateway: try await session.albumData(id: "302127")))
-        track.lyrics = Lyrics(results: try await session.lyrics(trackID: "3135556"))
-        track = track.applying(settings)
-        let resolver = MediaResolver(session: session, settings: settings)
-        let media = try (try await resolver.resolve([track], format: format))[0].get()
-        let out = URL(fileURLWithPath: "/tmp/deezdown-dump.\(format.fileExtension)")
-        try await MediaDownloader().download(media, to: out)
-        let art = await ArtworkStore().image(track.album.cover, size: 800, format: .jpeg(quality: 90))
-        try Tagger.tag(track, format: format, at: out, artwork: art, settings: settings)
-        print("WROTE \(out.path)")
+/// `key=value` lines, as ffprobe's `default=nw=1` writes them.
+private func ffprobeTags(_ output: String) -> [String: String] {
+    output.split(separator: "\n").reduce(into: [:]) { result, line in
+        guard let split = line.firstIndex(of: "=") else { return }
+        let key = line[line.startIndex..<split].replacing("TAG:", with: "")
+        result[key.lowercased()] = String(line[line.index(after: split)...])
     }
 }
-

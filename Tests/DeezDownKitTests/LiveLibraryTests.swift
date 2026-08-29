@@ -45,8 +45,7 @@ struct LiveLibrary {
         let playlist = try await library.playlist(id: "1313621735")
         #expect(!playlist.tracks.isEmpty)
 
-        let favorites = try await library.favorites()
-        #expect(favorites.playlists.count + favorites.albums.count + favorites.tracks.count >= 0)
+        _ = try await library.favorites()
 
         let charts = try await library.charts()
         #expect(!charts.albums.isEmpty || !charts.playlists.isEmpty)

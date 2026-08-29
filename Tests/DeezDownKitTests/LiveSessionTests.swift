@@ -8,6 +8,7 @@ private let liveARL = ProcessInfo.processInfo.environment["DEEZDOWN_TEST_ARL"]
 struct LiveSession {
     let session = DeezerSession()
 
+    @discardableResult
     private func signedIn() async throws -> DeezerUser {
         try await session.login(arl: #require(liveARL))
     }
