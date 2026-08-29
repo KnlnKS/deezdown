@@ -12,7 +12,7 @@ public struct DownloadContext: Sendable {
         isSingleTrackDownload: Bool = false,
         rootArtist: ArtistRef? = nil,
         format: TrackFormat = .flac,
-        today: CustomDate = CustomDate(deezerString: ISO8601DateFormatter().string(from: Date())) ?? CustomDate()
+        today: CustomDate = .today
     ) {
         self.playlist = playlist
         self.isSingleTrackDownload = isSingleTrackDownload

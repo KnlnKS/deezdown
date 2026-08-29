@@ -20,6 +20,17 @@ public struct CustomDate: Sendable, Codable, Equatable, Hashable {
         fixDayMonth()
     }
 
+    /// Today in the user's own calendar. Deliberately not a `DateFormatter`: building one
+    /// costs more than every other part of preparing a download put together.
+    public static var today: CustomDate {
+        let parts = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        return CustomDate(
+            day: String(format: "%02d", parts.day ?? 0),
+            month: String(format: "%02d", parts.month ?? 0),
+            year: String(parts.year ?? 0)
+        )
+    }
+
     public mutating func fixDayMonth() {
         if let numeric = Int(month), numeric > 12 {
             swap(&day, &month)

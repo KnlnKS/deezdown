@@ -5,8 +5,7 @@ public actor DownloadEngine {
     private struct TrackJob: Sendable {
         var itemID: String
         var index: Int
-        var media: ResolvedMedia?
-        var failure: DownloadFailure?
+        var outcome: Result<ResolvedMedia, DownloadFailure>
     }
 
     private struct ItemState {
@@ -25,6 +24,7 @@ public actor DownloadEngine {
     private let paths: AppPaths
     private let artworkStore = ArtworkStore()
     private let downloader = MediaDownloader()
+    private let encoder = JSONEncoder()
 
     private var settings: DownloadSettings
     private var items: [String: QueueItem] = [:]
@@ -41,6 +41,7 @@ public actor DownloadEngine {
         self.session = session
         self.settings = settings
         self.paths = paths
+        try? paths.createDirectories()
     }
 
     // MARK: - Observation
@@ -87,6 +88,9 @@ public actor DownloadEngine {
         for entry in links {
             let id = QueueItem.identifier(for: entry.link, format: format)
             guard items[id] == nil else { continue }
+            // Queue ids are deterministic, so an id removed earlier must lose its tombstone
+            // or the fresh item would be treated as canceled the moment it resolved.
+            canceled.remove(id)
             var item = QueueItem(
                 id: id, link: entry.link, title: entry.title, subtitle: entry.subtitle,
                 cover: entry.cover, format: format
@@ -97,7 +101,8 @@ public actor DownloadEngine {
             added.append(id)
         }
         guard !added.isEmpty else { return [] }
-        persist()
+        persist(added)
+        persistOrder()
         publish()
         pump()
         return added
@@ -141,7 +146,7 @@ public actor DownloadEngine {
             items[id] = item
         }
         states[id] = nil
-        persist()
+        persist(id)
         publish()
         pump()
     }
@@ -156,7 +161,7 @@ public actor DownloadEngine {
             items[id] = item
         }
         states.removeAll()
-        persist()
+        persist(order)
         publish()
     }
 
@@ -167,14 +172,23 @@ public actor DownloadEngine {
         items[id] = nil
         states[id] = nil
         order.removeAll { $0 == id }
-        try? FileManager.default.removeItem(at: paths.queueDirectory.appending(path: "\(id).json"))
-        persist()
+        try? FileManager.default.removeItem(at: queueFile(id))
+        persistOrder()
         publish()
     }
 
     /// Clears what needs no attention; items that failed stay so their errors can be read.
     public func clearFinished() {
-        for id in order where [.completed, .canceled].contains(items[id]?.status) { remove(id) }
+        let finished = Set(order.filter { [.completed, .canceled].contains(items[$0]?.status) })
+        guard !finished.isEmpty else { return }
+        for id in finished {
+            items[id] = nil
+            states[id] = nil
+            try? FileManager.default.removeItem(at: queueFile(id))
+        }
+        order.removeAll { finished.contains($0) }
+        persistOrder()
+        publish()
     }
 
     /// Pausing holds an item's remaining tracks aside; anything already in flight is allowed
@@ -185,7 +199,7 @@ public actor DownloadEngine {
         jobs.removeAll { $0.itemID == id }
         item.status = .paused
         items[id] = item
-        persist()
+        persist(id)
         publish()
     }
 
@@ -196,7 +210,7 @@ public actor DownloadEngine {
         jobs.append(contentsOf: released)
         item.status = states[id] == nil && released.isEmpty ? .queued : .downloading
         items[id] = item
-        persist()
+        persist(id)
         publish()
         pump()
         Task { await finishIfDone(id) }
@@ -213,7 +227,7 @@ public actor DownloadEngine {
         item.issues = []
         items[id] = item
         states[id] = nil
-        persist()
+        persist(id)
         publish()
         pump()
     }
@@ -279,7 +293,7 @@ public actor DownloadEngine {
                 isSingleTrackDownload: collection.isSingleTrack,
                 rootArtist: collection.rootArtist,
                 format: item.format,
-                today: CustomDate(deezerString: Self.isoToday()) ?? CustomDate()
+                today: .today
             )
 
             let resolvedMedia = try await MediaResolver(session: session, settings: settings)
@@ -320,9 +334,9 @@ public actor DownloadEngine {
                             "\(tracks[index].mainArtist.name) - \(tracks[index].title) -> \(resolved.id)"
                         )
                     }
-                    enqueueJob(TrackJob(itemID: id, index: index, media: media))
+                    enqueueJob(TrackJob(itemID: id, index: index, outcome: .success(media)))
                 case .failure(let failure):
-                    enqueueJob(TrackJob(itemID: id, index: index, failure: failure))
+                    enqueueJob(TrackJob(itemID: id, index: index, outcome: .failure(failure)))
                 }
             }
             if tracks.isEmpty { await finish(id) }
@@ -337,7 +351,7 @@ public actor DownloadEngine {
             ]
             items[id] = item
         }
-        persist()
+        persist(id)
         publish()
     }
 
@@ -349,25 +363,17 @@ public actor DownloadEngine {
         }
     }
 
-    private static func isoToday() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
-    }
-
     // MARK: - Track execution
 
     private func perform(_ job: TrackJob) async {
         guard !canceled.contains(job.itemID), let state = states[job.itemID] else { return }
         let track = state.tracks[job.index]
 
-        if let failure = job.failure {
+        let media: ResolvedMedia
+        switch job.outcome {
+        case .success(let resolved): media = resolved
+        case .failure(let failure):
             record(job.itemID, index: job.index, failure: failure, track: track)
-            await finishIfDone(job.itemID)
-            return
-        }
-        guard let media = job.media else {
-            record(job.itemID, index: job.index, failure: DownloadFailure(.notAvailable), track: track)
             await finishIfDone(job.itemID)
             return
         }
@@ -379,33 +385,28 @@ public actor DownloadEngine {
             base: base, format: media.format, duration: track.duration, mode: settings.overwriteFile
         )
 
+        let file: URL
+        let needsAudio: Bool
+        switch decision {
+        // A file that is already there needs no BPM, no lyrics and no request.
+        case .skip(let existing):
+            complete(job.itemID, index: job.index, file: existing)
+            await finishIfDone(job.itemID)
+            return
+        case .tagOnly(let existing): (file, needsAudio) = (existing, false)
+        case .download(let target): (file, needsAudio) = (target, true)
+        }
+
         let needsLyrics =
             settings.tags.lyrics || settings.tags.syncedLyrics || settings.syncedLyrics
         async let extras = trackExtras(for: track, needsLyrics: needsLyrics)
 
-        var enriched = track
-        var file: URL
-
-        switch decision {
-        case .skip(let existing):
-            _ = await extras
-            complete(job.itemID, index: job.index, file: existing)
-            await finishIfDone(job.itemID)
-            return
-
-        case .tagOnly(let existing):
-            let (bpm, lyrics) = await extras
-            enriched.bpm = bpm ?? enriched.bpm
-            enriched.lyrics = lyrics ?? enriched.lyrics
-            file = existing
-
-        case .download(let target):
-            file = target
+        if needsAudio {
             let itemID = job.itemID
             let index = job.index
             let lastReported = Mutex<Double>(0)
             do {
-                try await downloader.download(media, to: target) { [weak self] written, total in
+                try await downloader.download(media, to: file) { [weak self] written, total in
                     guard total > 0 else { return }
                     let fraction = min(1, Double(written) / Double(total))
                     let shouldReport = lastReported.withLock { last -> Bool in
@@ -416,24 +417,22 @@ public actor DownloadEngine {
                     guard shouldReport, let self else { return }
                     Task { await self.report(itemID: itemID, index: index, fraction: fraction) }
                 }
-            } catch let failure as DownloadFailure {
-                _ = await extras
-                record(job.itemID, index: job.index, failure: failure, track: track)
-                await finishIfDone(job.itemID)
-                return
             } catch {
                 _ = await extras
                 record(
                     job.itemID, index: job.index,
-                    failure: DownloadFailure(.network(error.localizedDescription)), track: track
+                    failure: error as? DownloadFailure ?? DownloadFailure(.network(error.localizedDescription)),
+                    track: track
                 )
                 await finishIfDone(job.itemID)
                 return
             }
-            let (bpm, lyrics) = await extras
-            enriched.bpm = bpm ?? enriched.bpm
-            enriched.lyrics = lyrics ?? enriched.lyrics
         }
+
+        var enriched = track
+        let (bpm, lyrics) = await extras
+        enriched.bpm = bpm ?? enriched.bpm
+        enriched.lyrics = lyrics ?? enriched.lyrics
 
         let artwork = states[job.itemID]?.artwork
         do {
@@ -533,7 +532,7 @@ public actor DownloadEngine {
         item.progress = 1
         items[id] = item
         states[id] = nil
-        persist()
+        persist(id)
         publish()
         pump()
     }
@@ -607,26 +606,41 @@ public actor DownloadEngine {
 
     // MARK: - Persistence
 
-    private func persist() {
-        try? paths.createDirectories()
-        let encoder = JSONEncoder()
-        try? encoder.encode(order).write(to: paths.queueDirectory.appending(path: "order.json"), options: .atomic)
-        for id in order {
+    private var orderFile: URL { paths.queueDirectory.appending(path: "order.json") }
+
+    private func queueFile(_ id: String) -> URL {
+        paths.queueDirectory.appending(path: "\(id).json")
+    }
+
+    /// Only what changed goes to disk. Rewriting every entry on every event put one file
+    /// write per queued item in the path of each finished track.
+    private func persist(_ ids: some Sequence<String>) {
+        for id in ids {
             guard let item = items[id] else { continue }
-            try? encoder.encode(item)
-                .write(to: paths.queueDirectory.appending(path: "\(id).json"), options: .atomic)
+            try? encoder.encode(item).write(to: queueFile(id), options: .atomic)
         }
+    }
+
+    private func persist(_ id: String) {
+        persist(CollectionOfOne(id))
+    }
+
+    private func persistOrder() {
+        try? encoder.encode(order).write(to: orderFile, options: .atomic)
     }
 
     /// Restores the queue but never auto-starts it, matching deemix.
     public func restore() {
+        items.removeAll()
+        order.removeAll()
+
         let decoder = JSONDecoder()
-        guard let data = try? Data(contentsOf: paths.queueDirectory.appending(path: "order.json")),
+        guard let data = try? Data(contentsOf: orderFile),
             let saved = try? decoder.decode([String].self, from: data)
         else { return }
 
         for id in saved {
-            guard let itemData = try? Data(contentsOf: paths.queueDirectory.appending(path: "\(id).json")),
+            guard let itemData = try? Data(contentsOf: queueFile(id)),
                 var item = try? decoder.decode(QueueItem.self, from: itemData)
             else { continue }
             if item.status.isActive {
