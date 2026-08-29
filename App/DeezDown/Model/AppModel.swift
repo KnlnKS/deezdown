@@ -119,12 +119,23 @@ final class AppModel {
     // MARK: - Queue
 
     func enqueue(_ link: DeezerLink, format: TrackFormat? = nil) async {
+        await enqueue([link], format: format)
+    }
+
+    func enqueue(tracks: [TrackSummary], format: TrackFormat? = nil) async {
+        await enqueue(tracks.map(\.link), format: format)
+    }
+
+    /// A selection is queued in one go: one round trip, and one message rather than one
+    /// per track.
+    func enqueue(_ links: [DeezerLink], format: TrackFormat? = nil) async {
+        guard !links.isEmpty else { return }
         guard let engine else {
             show(Toast(message: "Sign in to download", kind: .failure))
             return
         }
         do {
-            let added = try await engine.enqueue(link, format: format)
+            let added = try await engine.enqueue(links, format: format)
             if added.isEmpty {
                 show(Toast(message: "Already in the queue"))
             } else {
@@ -135,20 +146,16 @@ final class AppModel {
         }
     }
 
-    func enqueue(tracks: [TrackSummary], format: TrackFormat? = nil) async {
-        for track in tracks { await enqueue(track.link, format: format) }
-    }
-
     func enqueue(pasted text: String) async {
-        let candidates = LinkParser.split(text)
-        guard !candidates.isEmpty else { return }
-        for candidate in candidates {
+        var links: [DeezerLink] = []
+        for candidate in LinkParser.split(text) {
             do {
-                await enqueue(try await LinkParser.resolve(candidate))
+                links.append(try await LinkParser.resolve(candidate))
             } catch {
                 show(Toast(message: message(for: error), kind: .failure))
             }
         }
+        await enqueue(links)
     }
 
     func pause(_ id: String) { Task { await engine?.pause(id) } }
@@ -170,6 +177,30 @@ final class AppModel {
         Task {
             try? await Task.sleep(for: .seconds(3))
             if self.toast?.id == toast.id { self.toast = nil }
+        }
+    }
+
+    /// Every browsing screen loads the same way: reuse what was fetched recently, show a
+    /// spinner only when there is nothing on screen yet, and turn a failure into a message.
+    func load<Value>(
+        _ key: String,
+        force: Bool = false,
+        into state: (LoadState<Value>) -> Void,
+        fetch: () async throws -> Value
+    ) async {
+        if !force {
+            if let cached = cache.value(key, as: Value.self) {
+                state(.loaded(cached))
+                return
+            }
+            state(.loading)
+        }
+        do {
+            let fresh = try await fetch()
+            cache.store(fresh, for: key)
+            state(.loaded(fresh))
+        } catch {
+            state(.failed(message(for: error)))
         }
     }
 

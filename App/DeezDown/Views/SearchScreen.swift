@@ -184,36 +184,15 @@ struct SearchScreen: View {
     // MARK: - Grids
 
     private func albumGrid(_ items: [AlbumSummary]) -> some View {
-        CardGrid(items: items) { album in
-            NavigationLink(value: Route.album(album.id)) {
-                MediaCard(picture: album.cover, title: album.title, subtitle: album.artist, link: album.link)
-            }
-            .buttonStyle(.plain)
-        }
+        CardGrid(items: items) { MediaCard($0) }
     }
 
     private func artistGrid(_ items: [ArtistSummary]) -> some View {
-        CardGrid(items: items) { artist in
-            NavigationLink(value: Route.artist(artist.id)) {
-                MediaCard(
-                    picture: artist.picture, title: artist.name,
-                    subtitle: "\(artist.fans.formatted()) fans", link: artist.link, circular: true
-                )
-            }
-            .buttonStyle(.plain)
-        }
+        CardGrid(items: items) { MediaCard($0) }
     }
 
     private func playlistGrid(_ items: [PlaylistSummary]) -> some View {
-        CardGrid(items: items) { playlist in
-            NavigationLink(value: Route.playlist(playlist.id)) {
-                MediaCard(
-                    picture: playlist.picture, title: playlist.title,
-                    subtitle: "\(playlist.trackCount) tracks", link: playlist.link
-                )
-            }
-            .buttonStyle(.plain)
-        }
+        CardGrid(items: items) { MediaCard($0) }
     }
 
     // MARK: - Loading

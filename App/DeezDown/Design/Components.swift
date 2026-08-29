@@ -142,6 +142,8 @@ struct SectionHeader<Trailing: View>: View {
     }
 }
 
+/// A card is a link to whatever it shows, so it carries its own navigation rather than
+/// making every grid wrap it.
 struct MediaCard: View {
     var picture: Artwork
     var title: String
@@ -151,7 +153,17 @@ struct MediaCard: View {
 
     @State private var hovering = false
 
+    @ViewBuilder
     var body: some View {
+        if let route = Route(link: link) {
+            NavigationLink(value: route) { card }
+                .buttonStyle(.plain)
+        } else {
+            card
+        }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .bottomTrailing) {
                 FillingArtworkView(picture: picture, isCircular: circular)
@@ -169,6 +181,41 @@ struct MediaCard: View {
         .onHover { hovering = $0 }
         .animation(Motion.momentum, value: hovering)
         .downloadContextMenu(link)
+    }
+}
+
+extension MediaCard {
+    init(_ album: AlbumSummary, subtitle: String? = nil) {
+        self.init(
+            picture: album.cover, title: album.title,
+            subtitle: subtitle ?? album.artist, link: album.link
+        )
+    }
+
+    init(_ artist: ArtistSummary) {
+        self.init(
+            picture: artist.picture, title: artist.name,
+            subtitle: "\(artist.fans.formatted()) fans", link: artist.link, circular: true
+        )
+    }
+
+    init(_ playlist: PlaylistSummary, title: String? = nil, subtitle: String? = nil) {
+        self.init(
+            picture: playlist.picture, title: title ?? playlist.title,
+            subtitle: subtitle ?? "\(playlist.trackCount) tracks", link: playlist.link
+        )
+    }
+}
+
+/// Every browsing screen offers the same way to go and ask Deezer again.
+struct RefreshButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("Refresh", systemImage: "arrow.clockwise")
+        }
+        .help("Fetch the latest from Deezer")
     }
 }
 

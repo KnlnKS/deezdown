@@ -10,42 +10,22 @@ struct ChartsScreen: View {
             ScreenScroll {
                 SectionHeader("Charts", subtitle: "Deezer's top 100 for every country")
                 CardGrid(items: countries) { country in
-                    NavigationLink(value: Route.playlist(country.id)) {
-                        MediaCard(
-                            picture: country.picture,
-                            title: country.title.replacingOccurrences(of: "Top ", with: ""),
-                            subtitle: "\(country.trackCount) tracks",
-                            link: country.link
-                        )
-                    }
-                    .buttonStyle(.plain)
+                    MediaCard(country, title: country.title.replacing("Top ", with: ""))
                 }
             }
         }
         .navigationTitle("Charts")
         .toolbar {
             ToolbarItem {
-                Button { Task { await load(force: true) } } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .help("Fetch the latest from Deezer")
+                RefreshButton { Task { await load(force: true) } }
             }
         }
         .task { await load() }
     }
 
     private func load(force: Bool = false) async {
-        if !force, let cached = model.cache.value("charts", as: [PlaylistSummary].self) {
-            state = .loaded(cached)
-            return
-        }
-        if case .loaded = state {} else { state = .loading }
-        do {
-            let fresh = try await model.library.chartCountries()
-            model.cache.store(fresh, for: "charts")
-            state = .loaded(fresh)
-        } catch {
-            state = .failed(model.message(for: error))
+        await model.load("charts", force: force, into: { state = $0 }) {
+            try await model.library.chartCountries()
         }
     }
 }

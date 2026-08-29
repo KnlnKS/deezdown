@@ -76,6 +76,11 @@ public actor DownloadEngine {
 
     @discardableResult
     public func enqueue(_ link: DeezerLink, format requested: TrackFormat? = nil) async throws -> [String] {
+        try await enqueue([link], format: requested)
+    }
+
+    @discardableResult
+    public func enqueue(_ links: [DeezerLink], format requested: TrackFormat? = nil) async throws -> [String] {
         guard let user = await session.user else { throw DeezerError.notLoggedIn }
         var format = requested ?? settings.maxBitrate
         if !user.canStream(format) {
@@ -83,9 +88,11 @@ public actor DownloadEngine {
             format = user.highestAvailableFormat
         }
 
-        let links = try await expand(link)
+        var pending: [PendingLink] = []
+        for link in links { pending += try await expand(link) }
+
         var added: [String] = []
-        for entry in links {
+        for entry in pending {
             let id = QueueItem.identifier(for: entry.link, format: format)
             guard items[id] == nil else { continue }
             // Queue ids are deterministic, so an id removed earlier must lose its tombstone

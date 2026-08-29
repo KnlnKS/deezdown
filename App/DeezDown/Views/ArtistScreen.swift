@@ -40,13 +40,7 @@ struct ArtistScreen: View {
 
                 if let albums = detail.albums[tab] ?? detail.albums[.all], !albums.isEmpty {
                     CardGrid(items: albums) { album in
-                        NavigationLink(value: Route.album(album.id)) {
-                            MediaCard(
-                                picture: album.cover, title: album.title,
-                                subtitle: subtitle(for: album), link: album.link
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        MediaCard(album, subtitle: subtitle(for: album))
                     }
                 }
 
@@ -98,11 +92,6 @@ struct ArtistScreen: View {
     }
 
     private func load() async {
-        state = .loading
-        do {
-            state = .loaded(try await model.library.artist(id: id))
-        } catch {
-            state = .failed(model.message(for: error))
-        }
+        await model.load("artist-\(id)", into: { state = $0 }) { try await model.library.artist(id: id) }
     }
 }

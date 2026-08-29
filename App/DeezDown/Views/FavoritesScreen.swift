@@ -26,10 +26,7 @@ struct FavoritesScreen: View {
         .navigationTitle("Favorites")
         .toolbar {
             ToolbarItem {
-                Button { Task { await load(force: true) } } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .help("Fetch the latest from Deezer")
+                RefreshButton { Task { await load(force: true) } }
             }
         }
         .task { await load() }
@@ -67,47 +64,17 @@ struct FavoritesScreen: View {
     private func grid(_ results: SearchResults) -> some View {
         switch tab {
         case .albums:
-            CardGrid(items: results.albums) { album in
-                NavigationLink(value: Route.album(album.id)) {
-                    MediaCard(picture: album.cover, title: album.title, subtitle: album.artist, link: album.link)
-                }
-                .buttonStyle(.plain)
-            }
+            CardGrid(items: results.albums) { MediaCard($0) }
         case .artists:
-            CardGrid(items: results.artists) { artist in
-                NavigationLink(value: Route.artist(artist.id)) {
-                    MediaCard(
-                        picture: artist.picture, title: artist.name,
-                        subtitle: "\(artist.fans.formatted()) fans", link: artist.link, circular: true
-                    )
-                }
-                .buttonStyle(.plain)
-            }
+            CardGrid(items: results.artists) { MediaCard($0) }
         default:
-            CardGrid(items: results.playlists) { playlist in
-                NavigationLink(value: Route.playlist(playlist.id)) {
-                    MediaCard(
-                        picture: playlist.picture, title: playlist.title,
-                        subtitle: "\(playlist.trackCount) tracks", link: playlist.link
-                    )
-                }
-                .buttonStyle(.plain)
-            }
+            CardGrid(items: results.playlists) { MediaCard($0) }
         }
     }
 
     private func load(force: Bool = false) async {
-        if !force, let cached = model.cache.value("favorites", as: SearchResults.self) {
-            state = .loaded(cached)
-            return
-        }
-        if case .loaded = state {} else { state = .loading }
-        do {
-            let fresh = try await model.library.favorites()
-            model.cache.store(fresh, for: "favorites")
-            state = .loaded(fresh)
-        } catch {
-            state = .failed(model.message(for: error))
+        await model.load("favorites", force: force, into: { state = $0 }) {
+            try await model.library.favorites()
         }
     }
 }

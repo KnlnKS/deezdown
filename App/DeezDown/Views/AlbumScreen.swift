@@ -65,12 +65,7 @@ struct AlbumScreen: View {
     }
 
     private func load() async {
-        state = .loading
-        do {
-            state = .loaded(try await model.library.album(id: id))
-        } catch {
-            state = .failed(model.message(for: error))
-        }
+        await model.load("album-\(id)", into: { state = $0 }) { try await model.library.album(id: id) }
     }
 }
 
