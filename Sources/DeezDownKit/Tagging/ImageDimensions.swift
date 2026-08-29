@@ -9,7 +9,7 @@ enum ImageDimensions {
 
     private static func png(_ data: Data) -> (Int, Int, Int)? {
         guard data.count >= 26 else { return nil }
-        let bytes = [UInt8](data)
+        let bytes = [UInt8](data.prefix(26))
         let width = bytes[16...19].reduce(0) { $0 << 8 | Int($1) }
         let height = bytes[20...23].reduce(0) { $0 << 8 | Int($1) }
         let bitDepth = Int(bytes[24])
@@ -24,10 +24,12 @@ enum ImageDimensions {
         return (width, height, bitDepth * channels)
     }
 
+    /// Scans the markers in place: cover art runs to megabytes and only the frame header
+    /// near the front is ever read.
     private static func jpeg(_ data: Data) -> (Int, Int, Int)? {
-        let bytes = [UInt8](data)
-        var index = 2
-        while index + 9 < bytes.count {
+        let bytes = data[data.startIndex...]
+        var index = bytes.startIndex + 2
+        while index + 9 < bytes.endIndex {
             guard bytes[index] == 0xFF else {
                 index += 1
                 continue

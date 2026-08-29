@@ -5,15 +5,32 @@ public enum TemplateEngine {
     /// end up with a double space where the feature or advisory marker would have been.
     static let spaceEating: Set<String> = ["featartists", "explicit"]
 
+    /// One pass over the template. Sweeping the whole string once per variable was both
+    /// slower and order-dependent: a value that happened to contain a token was substituted
+    /// again or not depending on how the dictionary happened to be laid out.
     public static func render(_ template: String, _ variables: [String: String]) -> String {
-        var output = template
-        for (name, value) in variables {
-            let token = "%\(name)%"
-            if value.isEmpty, spaceEating.contains(name) {
-                output = output.replacingOccurrences(of: " \(token)", with: "")
+        var output = ""
+        output.reserveCapacity(template.count)
+        var rest = Substring(template)
+
+        while let start = rest.firstIndex(of: "%") {
+            let nameStart = rest.index(after: start)
+            guard let end = rest[nameStart...].firstIndex(of: "%") else { break }
+            guard let value = variables[String(rest[nameStart..<end])] else {
+                // Not a variable, so the closing marker may yet open a real one.
+                output += rest[...start]
+                rest = rest[nameStart...]
+                continue
             }
-            output = output.replacingOccurrences(of: token, with: value)
+            output += rest[..<start]
+            if value.isEmpty, spaceEating.contains(String(rest[nameStart..<end])), output.last == " " {
+                output.removeLast()
+            }
+            output += value
+            rest = rest[rest.index(after: end)...]
         }
+
+        output += rest
         return output.trimmingCharacters(in: .whitespaces)
     }
 
