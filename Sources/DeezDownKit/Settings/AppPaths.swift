@@ -6,7 +6,6 @@ public struct AppPaths: Sendable {
     public var settingsFile: URL { configDirectory.appending(path: "config.json") }
     public var loginFile: URL { configDirectory.appending(path: "login.json") }
     public var queueDirectory: URL { configDirectory.appending(path: "queue") }
-    public var logsDirectory: URL { configDirectory.appending(path: "logs") }
 
     public init(portable: Bool = false) {
         if portable {
@@ -26,7 +25,7 @@ public struct AppPaths: Sendable {
     }
 
     public func createDirectories() throws {
-        for directory in [configDirectory, queueDirectory, logsDirectory] {
+        for directory in [configDirectory, queueDirectory] {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
     }

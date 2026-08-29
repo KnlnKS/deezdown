@@ -13,9 +13,12 @@ public actor DeezerSession {
 
     private let urlSession: URLSession
     private let publicLimiter = RateLimiter(limit: 45, window: .seconds(5))
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
     private var apiToken: String?
     private var arl: String?
     private var licenseRefreshedAt: ContinuousClock.Instant?
+    private var userRefresh: Task<DeezerUser?, any Error>?
 
     public init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -58,13 +61,22 @@ public actor DeezerSession {
         if let refreshedAt = licenseRefreshedAt, ContinuousClock.now - refreshedAt < Self.licenseLifetime {
             return current.licenseToken
         }
-        let results = try await gateway("deezer.getUserData")
-        if let refreshed = makeUser(from: results) {
-            user = refreshed
+        return try await refreshedUser()?.licenseToken ?? current.licenseToken
+    }
+
+    /// One refresh at a time. A queue resolving several albums at once would otherwise send
+    /// the same user-data request from every batch in flight.
+    private func refreshedUser() async throws -> DeezerUser? {
+        if let refreshing = userRefresh { return try await refreshing.value }
+        let refresh = Task { () throws -> DeezerUser? in
+            guard let loaded = makeUser(from: try await gateway("deezer.getUserData")) else { return nil }
+            user = loaded
             licenseRefreshedAt = .now
-            return refreshed.licenseToken
+            return loaded
         }
-        return current.licenseToken
+        userRefresh = refresh
+        defer { userRefresh = nil }
+        return try await refresh.value
     }
 
     private func makeUser(from results: JSONValue) -> DeezerUser? {
@@ -112,7 +124,7 @@ public actor DeezerSession {
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             if let language = user?.language { request.setValue(language, forHTTPHeaderField: "Accept-Language") }
-            request.httpBody = try JSONEncoder().encode(JSONValue.object(arguments))
+            request.httpBody = try encoder.encode(JSONValue.object(arguments))
 
             let body: JSONValue
             do {
@@ -153,11 +165,7 @@ public actor DeezerSession {
 
     private func resolvedAPIToken() async throws -> String {
         if let apiToken { return apiToken }
-        let results = try await gateway("deezer.getUserData")
-        if user == nil, let loaded = makeUser(from: results) {
-            user = loaded
-            licenseRefreshedAt = .now
-        }
+        _ = try await refreshedUser()
         guard let apiToken else { throw DeezerError.badResponse }
         return apiToken
     }
@@ -211,7 +219,7 @@ public actor DeezerSession {
         var request = URLRequest(url: Self.mediaURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(
+        request.httpBody = try encoder.encode(
             JSONValue.object([
                 "license_token": .string(license),
                 "media": .array([
@@ -226,12 +234,10 @@ public actor DeezerSession {
 
         let body = try await send(request)
         return body["data"].arrayValue.map { entry in
-            if let url = entry["media"][0]["sources"].arrayValue.compactMap({ URL(string: $0["url"].stringValue ?? "") })
-                .first
-            {
-                let mirrors = entry["media"][0]["sources"].arrayValue.dropFirst()
-                    .compactMap { URL(string: $0["url"].stringValue ?? "") }
-                return .success(primary: url, mirrors: Array(mirrors))
+            let sources = entry["media"][0]["sources"].arrayValue
+                .compactMap { URL(string: $0["url"].stringValue ?? "") }
+            if let primary = sources.first {
+                return .success(primary: primary, mirrors: Array(sources.dropFirst()))
             }
             let code = entry["errors"][0]["code"].intValue ?? 0
             return .failure(code: code, message: entry["errors"][0]["message"].stringValue ?? "")
@@ -245,7 +251,7 @@ public actor DeezerSession {
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw DeezerError.http(http.statusCode)
         }
-        return try JSONDecoder().decode(JSONValue.self, from: data)
+        return try decoder.decode(JSONValue.self, from: data)
     }
 
     private func isTransient(_ error: any Error) -> Bool {

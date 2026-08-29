@@ -20,15 +20,6 @@ extension DeezerSession {
         return results["data"].arrayValue
     }
 
-    public func refreshedTrackToken(id: String) async throws -> (token: String, expires: Int) {
-        let results = try await gateway(
-            "song.getData",
-            ["SNG_ID": .string(id), "array_default": .array(["TRACK_TOKEN", "TRACK_TOKEN_EXPIRE"])]
-        )
-        guard let token = results["TRACK_TOKEN"].stringValue else { throw DeezerError.badResponse }
-        return (token, results["TRACK_TOKEN_EXPIRE"].intValue ?? 0)
-    }
-
     public func albumData(id: String) async throws -> JSONValue {
         try await gateway("album.getData", ["ALB_ID": .string(id)])
     }
@@ -116,11 +107,6 @@ extension DeezerSession {
         )
     }
 
-    public func favoriteTrackIDs() async throws -> [String] {
-        let results = try await gateway("song.getFavoriteIds", ["nb": 10000, "start": 0, "checksum": .null])
-        return results["data"].arrayValue.compactMap { $0["SNG_ID"].stringValue }
-    }
-
     public func profileTab(userID: String, tab: ProfileTab, limit: Int = 200) async throws -> [JSONValue] {
         let results = try await gateway(
             "deezer.pageProfile",
@@ -135,10 +121,6 @@ extension DeezerSession {
             "user.getSongsHistory", ["nb": .int(limit), "start": .int(start)]
         )
         return results["data"].arrayValue
-    }
-
-    public func userMenu() async throws -> JSONValue {
-        try await gateway("deezer.userMenu")
     }
 
     public func chartCountries() async throws -> [JSONValue] {
