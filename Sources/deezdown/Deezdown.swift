@@ -69,7 +69,10 @@ struct Login: AsyncParsableCommand {
 }
 
 struct Config: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Show where settings and downloads live.")
+    static let configuration = CommandConfiguration(
+        abstract: "Show or change persistent download settings.",
+        subcommands: [Get.self, Set.self, Reset.self]
+    )
 
     @OptionGroup var options: GlobalOptions
 
@@ -78,6 +81,43 @@ struct Config: AsyncParsableCommand {
         print("Config:    \(options.paths.configDirectory.path(percentEncoded: false))")
         print("Downloads: \(settings.downloadLocation)")
         print("Quality:   \(settings.maxBitrate.displayName)")
+        print("Use `deezdown config get` to list every setting.")
+    }
+
+    struct Get: ParsableCommand {
+        static let configuration = CommandConfiguration(abstract: "Print one setting or the complete configuration as JSON.")
+        @OptionGroup var options: GlobalOptions
+        @Argument(help: "Setting name, such as tracknameTemplate or tags.lyrics.") var key: String?
+
+        func run() throws {
+            let value = try ConfigurationValue(SettingsStore(paths: options.paths).load())
+            print(try value.render(key: key))
+        }
+    }
+
+    struct Set: ParsableCommand {
+        static let configuration = CommandConfiguration(abstract: "Change and save a setting.")
+        @OptionGroup var options: GlobalOptions
+        @Argument(help: "Setting name, such as albumTracknameTemplate or tags.artist.") var key: String
+        @Argument(help: "New value. Booleans use true or false; enum values use their stored names.") var value: String
+
+        func run() throws {
+            let store = SettingsStore(paths: options.paths)
+            var configuration = try ConfigurationValue(store.load())
+            let settings = try configuration.setting(key, to: value)
+            try store.save(settings)
+            print(try ConfigurationValue(settings).render(key: key))
+        }
+    }
+
+    struct Reset: ParsableCommand {
+        static let configuration = CommandConfiguration(abstract: "Restore all default settings.")
+        @OptionGroup var options: GlobalOptions
+
+        func run() throws {
+            try SettingsStore(paths: options.paths).save(DownloadSettings())
+            print("Settings restored to defaults.")
+        }
     }
 }
 
