@@ -2,9 +2,7 @@ import Foundation
 import Testing
 @testable import DeezDownKit
 
-private let liveARL = ProcessInfo.processInfo.environment["DEEZDOWN_TEST_ARL"]
-
-@Suite(.enabled(if: liveARL != nil, "set DEEZDOWN_TEST_ARL to run live Deezer tests"), .serialized)
+@Suite(.live, .serialized)
 struct LiveLibrary {
     let session = DeezerSession()
 
@@ -14,7 +12,7 @@ struct LiveLibrary {
     }
 
     @Test func `search returns every result type`() async throws {
-        let results = try await library().search("daft punk")
+        let results = try await library().search("daft punk", limit: 5)
         #expect(!results.tracks.isEmpty)
         #expect(!results.albums.isEmpty)
         #expect(!results.artists.isEmpty)

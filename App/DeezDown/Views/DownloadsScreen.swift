@@ -15,6 +15,7 @@ struct DownloadsScreen: View {
                 } actions: {
                     Button("Add Link…") { model.send(.addLink) }
                 }
+                .blendsWithToolbar()
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
@@ -23,52 +24,33 @@ struct DownloadsScreen: View {
                         }
                     }
                     .padding(Metrics.gutter)
-                    .animation(Motion.standard, value: model.queue.map(\.id))
+                    .animation(Motion.standard, value: model.queue.count)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .navigationTitle("Downloads")
-        .navigationSubtitle(subtitle)
         .toolbar {
             ToolbarItem {
-                Button { model.revealDownloads() } label: {
-                    Label("Open Downloads Folder", systemImage: "folder")
-                }
-                .help("Open the downloads folder")
+                Button("Open Downloads Folder", systemImage: "folder") { model.revealDownloads() }
+                    .help("Open the downloads folder")
             }
             ToolbarItem {
-                Button { model.resumeAll() } label: {
-                    Label("Resume All", systemImage: "play.circle")
-                }
-                .disabled(model.summary.paused == 0)
-                .help("Resume every paused download")
+                Button("Resume All", systemImage: "play.circle") { model.resumeAll() }
+                    .disabled(model.summary.paused == 0)
+                    .help("Resume every paused download")
             }
             ToolbarItem {
-                Button { model.clearFinished() } label: {
-                    Label("Clear Finished", systemImage: "checklist.checked")
-                }
-                .disabled(!model.summary.canClear)
-                .help("Clear finished downloads")
+                Button("Clear Finished", systemImage: "checklist.checked") { model.clearFinished() }
+                    .disabled(!model.summary.canClear)
+                    .help("Clear finished downloads")
             }
             ToolbarItem {
-                Button { model.cancelAll() } label: {
-                    Label("Cancel All", systemImage: "xmark.circle")
-                }
-                .disabled(model.summary.active == 0)
-                .help("Cancel everything in the queue")
+                Button("Cancel All", systemImage: "xmark.circle") { model.cancelAll() }
+                    .disabled(model.summary.active == 0)
+                    .help("Cancel everything in the queue")
             }
         }
         .sheet(item: $issuesFor) { item in IssuesSheet(item: item) }
-    }
-
-    private var subtitle: String {
-        let summary = model.summary
-        if summary.paused > 0, summary.active == summary.paused { return "\(summary.paused) paused" }
-        if summary.active > summary.paused { return "\(summary.active - summary.paused) in progress" }
-        let tracks = summary.downloadedTracks
-        guard tracks > 0 else { return "" }
-        return "\(tracks) track\(tracks == 1 ? "" : "s") downloaded"
     }
 }
 
@@ -101,7 +83,7 @@ private struct DownloadRow: View {
             VStack(alignment: .trailing, spacing: 5) {
                 ProgressView(value: item.progress)
                     .progressViewStyle(.linear)
-                    .tint(barTint)
+                    .tint(tint)
                     .opacity(item.status == .queued ? 0.35 : 1)
                     .frame(width: 220)
                 HStack(spacing: 6) {
@@ -138,12 +120,7 @@ private struct DownloadRow: View {
                     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: destination.path(percentEncoded: false))
                 }
             }
-            if let url = item.link.webURL {
-                Button("Copy Deezer Link") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                }
-            }
+            if let url = item.link.webURL { CopyLinkButton(url: url) }
             Divider()
             Button("Remove", role: .destructive) { model.remove(item.id) }
         }
@@ -208,17 +185,8 @@ private struct DownloadRow: View {
         case .completed: .success
         case .withErrors: .warning
         case .failed: .failure
-        default: .secondary
-        }
-    }
-
-    private var barTint: Color {
-        switch item.status {
-        case .failed: .failure
-        case .withErrors: .warning
-        case .completed: .success
-        case .paused: .secondary
-        default: .brand
+        case .paused, .canceled: .secondary
+        case .queued, .resolving, .downloading: .brand
         }
     }
 

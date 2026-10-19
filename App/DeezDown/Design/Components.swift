@@ -1,41 +1,6 @@
 import DeezDownKit
 import SwiftUI
 
-struct DownloadButton: View {
-    @Environment(AppModel.self) private var model
-    var link: DeezerLink
-    var title = "Download"
-
-    var body: some View {
-        Button {
-            Task { await model.enqueue(link) }
-        } label: {
-            Label(title, systemImage: "arrow.down.circle.fill")
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .fixedSize()
-    }
-}
-
-struct DownloadIconButton: View {
-    @Environment(AppModel.self) private var model
-    var link: DeezerLink
-
-    var body: some View {
-        Button {
-            Task { await model.enqueue(link) }
-        } label: {
-            Image(systemName: "arrow.down.circle")
-                .font(.body)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .help("Download")
-        .accessibilityLabel("Download")
-    }
-}
-
 /// Sits on the artwork, so it needs its own ground to stay legible over any cover.
 struct CardDownloadButton: View {
     @Environment(AppModel.self) private var model
@@ -63,6 +28,17 @@ struct CardDownloadButton: View {
     }
 }
 
+struct CopyLinkButton: View {
+    var url: URL
+
+    var body: some View {
+        Button("Copy Deezer Link") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        }
+    }
+}
+
 struct DownloadContextMenu: ViewModifier {
     @Environment(AppModel.self) private var model
     @Environment(Navigator.self) private var navigator: Navigator?
@@ -80,10 +56,7 @@ struct DownloadContextMenu: ViewModifier {
             }
             Divider()
             if let url = link.webURL {
-                Button("Copy Deezer Link") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                }
+                CopyLinkButton(url: url)
                 Button("Open in Deezer") { NSWorkspace.shared.open(url) }
             }
         }
@@ -149,7 +122,6 @@ struct MediaCard: View {
     var title: String
     var subtitle: String
     var link: DeezerLink
-    var circular = false
 
     @State private var hovering = false
 
@@ -166,7 +138,7 @@ struct MediaCard: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .bottomTrailing) {
-                FillingArtworkView(picture: picture, isCircular: circular)
+                FillingArtworkView(picture: picture)
                 CardDownloadButton(link: link, isVisible: hovering)
                     .padding(10)
             }
@@ -195,7 +167,7 @@ extension MediaCard {
     init(_ artist: ArtistSummary) {
         self.init(
             picture: artist.picture, title: artist.name,
-            subtitle: "\(artist.fans.formatted()) fans", link: artist.link, circular: true
+            subtitle: "\(artist.fans.formatted()) fans", link: artist.link
         )
     }
 
@@ -207,35 +179,26 @@ extension MediaCard {
     }
 }
 
-/// Every browsing screen offers the same way to go and ask Deezer again.
-struct RefreshButton: View {
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label("Refresh", systemImage: "arrow.clockwise")
-        }
-        .help("Fetch the latest from Deezer")
-    }
-}
-
 struct ToastView: View {
     var toast: Toast?
 
     var body: some View {
-        if let toast {
-            Label(toast.message, systemImage: symbol(toast.kind))
-                .font(.callout)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
-                .foregroundStyle(tint(toast.kind))
-                .shadow(color: .black.opacity(0.16), radius: 12, y: 4)
-                .padding(.bottom, 22)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .animation(Motion.momentum, value: toast.id)
+        // The animation sits outside the condition so the toast's arrival and exit animate too.
+        ZStack {
+            if let toast {
+                Label(toast.message, systemImage: symbol(toast.kind))
+                    .font(.callout)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
+                    .foregroundStyle(tint(toast.kind))
+                    .shadow(color: .black.opacity(0.16), radius: 12, y: 4)
+                    .padding(.bottom, 22)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(Motion.momentum, value: toast?.id)
     }
 
     private func symbol(_ kind: Toast.Kind) -> String {
@@ -252,15 +215,6 @@ struct ToastView: View {
         case .success: .success
         case .failure: .failure
         }
-    }
-}
-
-struct LoadingState: View {
-    var body: some View {
-        ProgressView()
-            .controlSize(.large)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.top, 80)
     }
 }
 
@@ -288,31 +242,53 @@ struct PillButton: View {
     }
 }
 
-/// Deezer sets release and artist names in a heavy condensed grotesque; SF's condensed
-/// width is the native equivalent and keeps long titles on one line.
-struct DisplayTitle: View {
-    var text: String
-    var size: CGFloat = 40
+/// The top of an album, artist or playlist page: its artwork, what it is, and a way to download it.
+struct DetailHeader<Details: View>: View {
+    @Environment(AppModel.self) private var model
+    var picture: Artwork
+    var kind: String
+    var title: String
+    var explicit = false
+    var link: DeezerLink
+    var download: String
+    @ViewBuilder var details: () -> Details
 
     var body: some View {
-        Text(text)
-            .font(.system(size: size, weight: .heavy))
-            .fontWidth(.condensed)
-            .tracking(-0.5)
-            .lineLimit(2)
-            .minimumScaleFactor(0.6)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-}
+        HStack(alignment: .bottom, spacing: 20) {
+            ArtworkView(picture: picture, side: 190, corner: Metrics.cardCorner)
+                .shadow(color: .black.opacity(0.28), radius: 22, y: 10)
 
-struct Eyebrow: View {
-    var text: String
+            VStack(alignment: .leading, spacing: 10) {
+                Text(kind.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .tracking(1)
+                    .foregroundStyle(.brand)
 
-    var body: some View {
-        Text(text.uppercased())
-            .font(.caption2.weight(.bold))
-            .tracking(1)
-            .foregroundStyle(.brand)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    // Deezer sets release and artist names in a heavy condensed grotesque; SF's
+                    // condensed width is the native equivalent and keeps long titles on one line.
+                    Text(title)
+                        .font(.system(size: 40, weight: .heavy))
+                        .fontWidth(.condensed)
+                        .tracking(-0.5)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.6)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if explicit { ExplicitBadge() }
+                }
+
+                details()
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Button(download, systemImage: "arrow.down.circle.fill") { Task { await model.enqueue(link) } }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .fixedSize()
+                    .padding(.top, 8)
+            }
+            Spacer(minLength: 0)
+        }
     }
 }
 
@@ -349,5 +325,33 @@ struct UnderlineTabs<Value: Hashable>: View {
             Spacer(minLength: 0)
         }
         .animation(Motion.standard, value: selection)
+    }
+}
+
+/// Tabs pinned to the top of a page, over whatever the chosen tab shows.
+struct TabbedPage<Value: Hashable, Content: View>: View {
+    @Binding var selection: Value
+    var options: [(value: Value, title: String)]
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            UnderlineTabs(selection: $selection, options: options)
+                .padding(.horizontal, Metrics.gutter)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+            Divider()
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .blendsWithToolbar()
+    }
+}
+
+extension View {
+    /// The toolbar puts up its own background unless a scroll view sits right under it, so a
+    /// page whose top stays put drops it to match the pages that scroll.
+    func blendsWithToolbar() -> some View {
+        toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
     }
 }

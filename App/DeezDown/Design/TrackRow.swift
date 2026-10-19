@@ -48,7 +48,11 @@ struct TrackRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 44, alignment: .trailing)
 
-            DownloadIconButton(link: track.link)
+            Button("Download", systemImage: "arrow.down.circle") { Task { await model.enqueue(track.link) } }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .contentShape(.rect)
+                .help("Download")
                 .opacity(hovering ? 1 : 0.35)
         }
         .frame(height: showsArtwork ? 44 : 32)
@@ -118,18 +122,35 @@ extension View {
     }
 }
 
-struct DiscHeader: View {
-    var number: Int
+/// An album or playlist page: a header over its tracks, any of which can be picked out to download.
+struct TrackList<Header: View, Rows: View>: View {
+    var tracks: [TrackSummary]
+    @ViewBuilder var rows: () -> Rows
+    @ViewBuilder var header: () -> Header
+
+    @State private var selection: Set<TrackSummary.ID> = []
 
     var body: some View {
-        Label("Disc \(number)", systemImage: "opticaldisc")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.top, 8)
+        VStack(spacing: 0) {
+            List(selection: $selection) {
+                Section {
+                    rows().trackRowInsets()
+                } header: {
+                    header()
+                        .padding(.horizontal, Metrics.listGutter)
+                        .padding(.vertical, 18)
+                        .textCase(nil)
+                        .foregroundStyle(.primary)
+                }
+            }
+            .listStyle(.inset)
+            SelectionFooter(tracks: tracks, selection: selection)
+        }
+        .animation(Motion.standard, value: selection.isEmpty)
     }
 }
 
-struct SelectionFooter: View {
+private struct SelectionFooter: View {
     @Environment(AppModel.self) private var model
     var tracks: [TrackSummary]
     var selection: Set<TrackSummary.ID>

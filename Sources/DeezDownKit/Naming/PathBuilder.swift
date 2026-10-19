@@ -223,7 +223,7 @@ extension PathBuilder {
     public static let playlistTokens = blank.builder.playlistVariables(Playlist(gateway: .null), blank.context)
         .map(\.key)
     public static let collectionTokens = blank.builder.collectionVariables(
-        QueueItem(id: "", link: .track(""), title: "", subtitle: "", cover: Artwork(md5: "", kind: .cover), format: .flac),
+        QueueItem(link: .track(""), title: "", subtitle: "", cover: Artwork(md5: "", kind: .cover), format: .flac),
         playlist: nil, size: 0
     ).map(\.key)
 }

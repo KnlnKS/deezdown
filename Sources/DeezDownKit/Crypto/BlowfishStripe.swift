@@ -22,7 +22,7 @@ public struct StripeDecryptError: Error, Sendable {
 }
 
 public final class StripeDecryptor {
-    private var cryptor: CCCryptorRef?
+    private let cryptor: CCCryptorRef
     private var pending: [UInt8] = []
     private var sawFirstBytes = false
 
@@ -51,7 +51,7 @@ public final class StripeDecryptor {
     }
 
     deinit {
-        if let cryptor { CCCryptorRelease(cryptor) }
+        CCCryptorRelease(cryptor)
     }
 
     public func consume(_ incoming: some Sequence<UInt8>) throws -> [UInt8] {
@@ -78,29 +78,19 @@ public final class StripeDecryptor {
         return depadIfNeeded(out)
     }
 
+    /// CommonCrypto deciphers in place, so the block never leaves the buffer.
     private func decryptBlock(in buffer: inout [UInt8], at offset: Int) throws {
-        guard let cryptor else { throw StripeDecryptError(status: Int32(kCCParamError)) }
         var status = StripeCrypto.iv.withUnsafeBytes { CCCryptorReset(cryptor, $0.baseAddress) }
         guard status == kCCSuccess else { throw StripeDecryptError(status: status) }
 
-        var block = [UInt8](repeating: 0, count: StripeCrypto.blockSize)
         var moved = 0
-        status = buffer.withUnsafeBytes { source in
-            block.withUnsafeMutableBytes { destination in
-                CCCryptorUpdate(
-                    cryptor,
-                    source.baseAddress!.advanced(by: offset),
-                    StripeCrypto.blockSize,
-                    destination.baseAddress,
-                    StripeCrypto.blockSize,
-                    &moved
-                )
-            }
+        status = buffer.withUnsafeMutableBytes { bytes in
+            let block = bytes.baseAddress! + offset
+            return CCCryptorUpdate(cryptor, block, StripeCrypto.blockSize, block, StripeCrypto.blockSize, &moved)
         }
         guard status == kCCSuccess, moved == StripeCrypto.blockSize else {
             throw StripeDecryptError(status: status)
         }
-        buffer.replaceSubrange(offset..<(offset + StripeCrypto.blockSize), with: block)
     }
 
     private func depadIfNeeded(_ buffer: [UInt8]) -> [UInt8] {

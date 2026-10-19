@@ -4,10 +4,7 @@ public enum M3U8Writer {
     /// Paths are written relative to the extras folder so the playlist survives being moved.
     public static func write(files: [URL?], to destination: URL, relativeTo root: URL) throws {
         let lines = files.map { $0.map { relativePath(of: $0, in: root) } ?? "" }
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(), withIntermediateDirectories: true
-        )
-        try lines.joined(separator: "\n").write(to: destination, atomically: true, encoding: .utf8)
+        try lines.joined(separator: "\n").writeCreatingFolder(to: destination)
     }
 
     static func relativePath(of file: URL, in root: URL) -> String {
@@ -47,20 +44,14 @@ public enum LRCWriter {
         if FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)), !overwrite {
             return
         }
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(), withIntermediateDirectories: true
-        )
-        try text.write(to: destination, atomically: true, encoding: .utf8)
+        try text.writeCreatingFolder(to: destination)
     }
 }
 
 public enum LogWriter {
     /// A collection's log is written whole, with deemix's Windows line endings.
     public static func write(_ lines: [String], to destination: URL) throws {
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(), withIntermediateDirectories: true
-        )
-        try lines.map { $0 + "\r\n" }.joined().write(to: destination, atomically: true, encoding: .utf8)
+        try lines.map { $0 + "\r\n" }.joined().writeCreatingFolder(to: destination)
     }
 
     /// A single download adds its line to the folder's log, once.
@@ -68,5 +59,12 @@ public enum LogWriter {
         let existing = (try? String(contentsOf: destination, encoding: .utf8)) ?? ""
         guard !existing.contains(line) else { return }
         try (existing + line + "\r\n").write(to: destination, atomically: true, encoding: .utf8)
+    }
+}
+
+extension String {
+    fileprivate func writeCreatingFolder(to destination: URL) throws {
+        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try write(to: destination, atomically: true, encoding: .utf8)
     }
 }

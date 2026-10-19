@@ -55,10 +55,9 @@ final class ProgressReporter {
             summary += "\n\(destination.path(percentEncoded: false))"
         }
         print(summary)
-        for item in queue where !item.issues.isEmpty {
+        for item in queue {
             for issue in item.issues.prefix(10) {
-                FileHandle.standardError.write(
-                    Data("  ✗ \(issue.artist) - \(issue.title): \(issue.message)\n".utf8))
+                printError("  ✗ \(issue.artist) - \(issue.title): \(issue.message)")
             }
         }
     }

@@ -34,18 +34,6 @@ public enum TrackFormat: Int, Sendable, CaseIterable, Codable, Comparable {
         }
     }
 
-    public var filesizeKey: String {
-        switch self {
-        case .flac: "FILESIZE_FLAC"
-        case .mp3_320: "FILESIZE_MP3_320"
-        case .mp3_128: "FILESIZE_MP3_128"
-        case .mp4ra3: "FILESIZE_MP4_RA3"
-        case .mp4ra2: "FILESIZE_MP4_RA2"
-        case .mp4ra1: "FILESIZE_MP4_RA1"
-        case .default, .local: "FILESIZE_MP3_MISC"
-        }
-    }
-
     public var displayName: String {
         switch self {
         case .flac: "FLAC"
@@ -68,15 +56,18 @@ public enum TrackFormat: Int, Sendable, CaseIterable, Codable, Comparable {
 
     public static let selectable: [TrackFormat] = [.flac, .mp3_320, .mp3_128, .mp4ra3, .mp4ra2, .mp4ra1]
 
+    /// Every name each format answers to, in the order the CLI lists them.
+    public static let aliases: [(format: TrackFormat, names: [String])] = [
+        (.flac, ["flac", "lossless", "9"]),
+        (.mp3_320, ["mp3_320", "mp3", "320", "3"]),
+        (.mp3_128, ["mp3_128", "128", "1"]),
+        (.mp4ra3, ["360_hq", "mp4_ra3", "360", "15"]),
+        (.mp4ra2, ["360_mq", "mp4_ra2", "14"]),
+        (.mp4ra1, ["360_lq", "mp4_ra1", "13"]),
+    ]
+
     public static func parse(_ text: String) -> TrackFormat? {
-        switch text.lowercased() {
-        case "flac", "lossless", "9": .flac
-        case "mp3_320", "mp3", "320", "3": .mp3_320
-        case "mp3_128", "128", "1": .mp3_128
-        case "mp4_ra3", "360", "360_hq", "15": .mp4ra3
-        case "mp4_ra2", "360_mq", "14": .mp4ra2
-        case "mp4_ra1", "360_lq", "13": .mp4ra1
-        default: nil
-        }
+        let text = text.lowercased()
+        return aliases.first { $0.names.contains(text) }?.format
     }
 }

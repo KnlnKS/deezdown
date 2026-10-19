@@ -18,8 +18,7 @@ actor RateLimiter {
                 recent.append(now)
                 return
             }
-            guard let oldest = recent.first else { continue }
-            try await Task.sleep(for: window - (now - oldest))
+            try await Task.sleep(for: window - (now - recent[0]))
         }
     }
 }

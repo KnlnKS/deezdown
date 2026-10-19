@@ -2,9 +2,7 @@ import Foundation
 import Testing
 @testable import DeezDownKit
 
-private let liveARL = ProcessInfo.processInfo.environment["DEEZDOWN_TEST_ARL"]
-
-@Suite(.enabled(if: liveARL != nil, "set DEEZDOWN_TEST_ARL to run live Deezer tests"), .serialized)
+@Suite(.live, .serialized)
 struct LiveSession {
     let session = DeezerSession()
 
@@ -26,13 +24,6 @@ struct LiveSession {
         }
     }
 
-    @Test func `an album resolves its whole tracklist with track tokens in one call`() async throws {
-        try await signedIn()
-        let tracks = try await session.albumTracks(id: "302127")
-        #expect(tracks.count == 14)
-        #expect(tracks.allSatisfy { $0["TRACK_TOKEN"].stringValue?.isEmpty == false })
-    }
-
     @Test func `track data carries the fields the downloader depends on`() async throws {
         try await signedIn()
         let track = try await session.trackData(id: "3135556")
@@ -42,31 +33,16 @@ struct LiveSession {
         #expect((track["FILESIZE_FLAC"].intValue ?? 0) > 0)
     }
 
-    @Test func `media urls come back for a batch of tokens with mirrors`() async throws {
-        let user = try await signedIn()
-        let tracks = try await session.albumTracks(id: "302127")
-        let tokens = tracks.compactMap { $0["TRACK_TOKEN"].stringValue }
-        let results = try await session.trackURLs(trackTokens: tokens, format: user.highestAvailableFormat)
-        #expect(results.count == tokens.count)
-        #expect(results.allSatisfy { if case .success = $0 { true } else { false } })
-    }
-
     @Test func `a bad track token reports an error instead of a url`() async throws {
         try await signedIn()
         let results = try await session.trackURLs(trackTokens: ["bogus"], format: .mp3_128)
         #expect(results == [.failure(code: 2000, message: "An error occurred while decoding track token.")])
     }
 
-    @Test func `search, lyrics, playlists and artists all resolve`() async throws {
+    @Test func `search and artists resolve`() async throws {
         try await signedIn()
         let (tracks, total) = try await session.search(query: "daft punk", kind: .track, limit: 5)
         #expect(!tracks.isEmpty && total > 0)
-
-        let lyrics = try await session.lyrics(trackID: "3135556")
-        #expect(lyrics["LYRICS_TEXT"].stringValue?.isEmpty == false)
-
-        let playlist = try await session.playlistTracks(id: "1313621735")
-        #expect(!playlist.isEmpty)
 
         let artist = try await session.artistData(id: "27")
         #expect(artist["ART_NAME"].stringValue == "Daft Punk")

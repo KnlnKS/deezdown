@@ -13,9 +13,9 @@ enum OverwritePolicy {
         base: URL,
         format: TrackFormat,
         duration: Int,
-        mode: OverwriteMode,
-        manager: FileManager = .default
+        mode: OverwriteMode
     ) -> OverwriteDecision {
+        let manager = FileManager.default
         let target = base.appendingPathExtension(format.fileExtension)
 
         switch mode {
@@ -39,15 +39,13 @@ enum OverwritePolicy {
 
         case .keepBoth:
             guard manager.fileExists(atPath: target.path(percentEncoded: false)) else { return .download(target) }
-            var index = 1
-            while index < 1000 {
+            for index in 1..<1000 {
                 let candidate = base.deletingLastPathComponent()
                     .appending(path: "\(base.lastPathComponent) (\(index))")
                     .appendingPathExtension(format.fileExtension)
                 if !manager.fileExists(atPath: candidate.path(percentEncoded: false)) {
                     return .download(candidate)
                 }
-                index += 1
             }
             return .download(target)
 

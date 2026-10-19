@@ -8,11 +8,7 @@ public actor ArtworkStore {
     private var inFlight: [URL: Task<Data?, Never>] = [:]
 
     public init() {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpAdditionalHeaders = ["User-Agent": DeezerSession.userAgent]
-        configuration.httpMaximumConnectionsPerHost = 6
-        configuration.timeoutIntervalForRequest = 20
-        urlSession = URLSession(configuration: configuration)
+        urlSession = URLSession(configuration: .deezer(connectionsPerHost: 6, timeout: 20))
     }
 
     public func image(_ picture: Artwork, size: Int, format: ImageFormat) async -> Data? {
@@ -29,7 +25,7 @@ public actor ArtworkStore {
         inFlight[url] = task
         let data = await task.value
         inFlight[url] = nil
-        if let data, !data.isEmpty { remember(data, for: url) }
+        if let data { remember(data, for: url) }
         return data
     }
 

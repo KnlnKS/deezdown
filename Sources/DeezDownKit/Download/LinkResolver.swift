@@ -29,7 +29,7 @@ public struct LinkResolver: Sendable {
 
     private func numericTrackID(_ id: String) async throws -> String {
         guard id.hasPrefix("isrc:") else { return id }
-        let results = try await session.publicTrack(isrc: String(id.dropFirst(5)))
+        let results = try await session.publicAPI("track/\(id)")
         guard let resolved = results["id"].stringValue, resolved != "0" else {
             throw DownloadFailure(.notOnDeezer)
         }

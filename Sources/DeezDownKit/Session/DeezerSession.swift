@@ -21,10 +21,7 @@ public actor DeezerSession {
     private var userRefresh: Task<DeezerUser?, any Error>?
 
     public init() {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpAdditionalHeaders = ["User-Agent": DeezerSession.userAgent]
-        configuration.httpMaximumConnectionsPerHost = 12
-        configuration.timeoutIntervalForRequest = 30
+        let configuration = URLSessionConfiguration.deezer(connectionsPerHost: 12, timeout: 30)
         configuration.waitsForConnectivity = true
         urlSession = URLSession(configuration: configuration)
     }
@@ -97,7 +94,6 @@ public actor DeezerSession {
 
     // MARK: - Gateway
 
-    @discardableResult
     public func gateway(_ method: String, _ arguments: [String: JSONValue] = [:]) async throws -> JSONValue {
         var arguments = arguments
         var attempt = 0
@@ -204,10 +200,6 @@ public actor DeezerSession {
     // MARK: - Media
 
     public func trackURLs(trackTokens: [String], format: TrackFormat) async throws -> [MediaResult] {
-        guard let user else { throw DeezerError.notLoggedIn }
-        guard user.canStream(format) else { throw DeezerError.wrongLicense(format) }
-        guard !trackTokens.isEmpty else { return [] }
-
         let license = try await licenseToken()
         var request = URLRequest(url: Self.mediaURL)
         request.httpMethod = "POST"
@@ -260,4 +252,15 @@ public actor DeezerSession {
 public enum MediaResult: Sendable, Equatable {
     case success(primary: URL, mirrors: [URL])
     case failure(code: Int, message: String)
+}
+
+extension URLSessionConfiguration {
+    /// Ephemeral, and presenting as the browser Deezer expects.
+    static func deezer(connectionsPerHost: Int, timeout: TimeInterval) -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpAdditionalHeaders = ["User-Agent": DeezerSession.userAgent]
+        configuration.httpMaximumConnectionsPerHost = connectionsPerHost
+        configuration.timeoutIntervalForRequest = timeout
+        return configuration
+    }
 }

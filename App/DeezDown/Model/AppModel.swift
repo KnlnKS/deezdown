@@ -2,7 +2,7 @@ import DeezDownKit
 import Observation
 import SwiftUI
 
-struct Toast: Identifiable, Equatable {
+struct Toast: Identifiable {
     enum Kind { case info, success, failure }
     let id = UUID()
     var message: String
@@ -14,7 +14,6 @@ struct Toast: Identifiable, Equatable {
 struct QueueSummary: Equatable {
     var active = 0
     var paused = 0
-    var downloadedTracks = 0
     var canRetry = false
     var canClear = false
 
@@ -22,7 +21,6 @@ struct QueueSummary: Equatable {
         for item in queue {
             if !item.status.isFinished { active += 1 }
             if item.status == .paused { paused += 1 }
-            downloadedTracks += item.completedTracks
             canRetry = canRetry || item.canRetry
             canClear = canClear || item.canClear
         }
@@ -157,8 +155,8 @@ final class AppModel {
 
     // MARK: - Queue
 
-    func enqueue(_ link: DeezerLink, format: TrackFormat? = nil) async {
-        await enqueue([link], format: format)
+    func enqueue(_ link: DeezerLink) async {
+        await enqueue([link])
     }
 
     /// A selection is queued in one go: one round trip, and one message rather than one
@@ -218,30 +216,6 @@ final class AppModel {
         Task {
             try? await Task.sleep(for: .seconds(3))
             if self.toast?.id == toast.id { self.toast = nil }
-        }
-    }
-
-    /// Every browsing screen loads the same way: reuse what was fetched recently, show a
-    /// spinner only when there is nothing on screen yet, and turn a failure into a message.
-    func load<Value>(
-        _ key: String,
-        force: Bool = false,
-        into state: (LoadState<Value>) -> Void,
-        fetch: () async throws -> Value
-    ) async {
-        if !force {
-            if let cached = cache.value(key, as: Value.self) {
-                state(.loaded(cached))
-                return
-            }
-            state(.loading)
-        }
-        do {
-            let fresh = try await fetch()
-            cache.store(fresh, for: key)
-            state(.loaded(fresh))
-        } catch {
-            state(.failed(error.localizedDescription))
         }
     }
 }

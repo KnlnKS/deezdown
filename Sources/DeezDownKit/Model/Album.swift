@@ -1,6 +1,6 @@
 import Foundation
 
-public enum RecordType: String, Sendable, CaseIterable {
+public enum RecordType: String, Sendable {
     case single, album, compile, ep, bundle
 
     init(gatewayType: String?, publicType: String?) {
@@ -34,7 +34,7 @@ public enum RecordType: String, Sendable, CaseIterable {
     }
 }
 
-public struct Album: Sendable, Equatable, Identifiable {
+public struct Album: Sendable, Equatable {
     public var id: String
     public var title: String
     public var mainArtist: ArtistRef
@@ -43,7 +43,6 @@ public struct Album: Sendable, Equatable, Identifiable {
     public var genres: [String]
     public var label: String
     public var barcode: String
-    public var copyright: String
     public var recordType: RecordType
     public var date: CustomDate?
     public var trackTotal: Int
@@ -53,25 +52,23 @@ public struct Album: Sendable, Equatable, Identifiable {
 
     public init(
         id: String, title: String, mainArtist: ArtistRef,
-        artists: [String] = [], cover: Artwork = Artwork(md5: "", kind: .cover), genres: [String] = [],
-        label: String = "Unknown", barcode: String = "Unknown", copyright: String = "",
-        recordType: RecordType = .album, date: CustomDate? = nil, trackTotal: Int = 0, discTotal: Int = 1,
-        explicit: Bool = false
+        cover: Artwork = Artwork(md5: "", kind: .cover), genres: [String] = [],
+        label: String = "Unknown", barcode: String = "Unknown",
+        date: CustomDate? = nil, trackTotal: Int = 0, discTotal: Int = 1
     ) {
         self.id = id
         self.title = title
         self.mainArtist = mainArtist
-        self.artists = artists.isEmpty ? [mainArtist.name] : artists
+        artists = [mainArtist.name]
         self.cover = cover
         self.genres = genres
         self.label = label
         self.barcode = barcode
-        self.copyright = copyright
-        self.recordType = recordType
+        recordType = .album
         self.date = date
         self.trackTotal = trackTotal
         self.discTotal = discTotal
-        self.explicit = explicit
+        explicit = false
     }
 
     init(gateway: JSONValue, publicData: JSONValue = .null) {
@@ -95,7 +92,6 @@ public struct Album: Sendable, Equatable, Identifiable {
         genres = publicData["genres"]["data"].arrayValue.compactMap { $0["name"].stringValue }
         label = gateway["LABEL_NAME"].stringValue ?? publicData["label"].stringValue ?? "Unknown"
         barcode = gateway["UPC"].stringValue ?? publicData["upc"].stringValue ?? "Unknown"
-        copyright = gateway["COPYRIGHT"].stringValue ?? ""
         recordType = RecordType(
             gatewayType: gateway["TYPE"].stringValue,
             publicType: publicData["record_type"].stringValue
@@ -107,9 +103,7 @@ public struct Album: Sendable, Equatable, Identifiable {
             ?? CustomDate(deezerString: publicData["release_date"].stringValue)
         trackTotal = gateway["NUMBER_TRACK"].intValue ?? publicData["nb_tracks"].intValue ?? 0
         discTotal = gateway["NUMBER_DISK"].intValue ?? 1
-        explicit =
-            (gateway["EXPLICIT_ALBUM_CONTENT"]["EXPLICIT_LYRICS_STATUS"].intValue ?? 0) == 1
-            || (publicData["explicit_lyrics"].boolValue ?? false)
+        explicit = gateway.isExplicit("EXPLICIT_ALBUM_CONTENT") || (publicData["explicit_lyrics"].boolValue ?? false)
     }
 
     static func orderedNames(from refs: [ArtistRef]) -> [String] {

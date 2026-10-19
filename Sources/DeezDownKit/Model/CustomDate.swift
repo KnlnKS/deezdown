@@ -5,7 +5,7 @@ public struct CustomDate: Sendable, Equatable, Hashable {
     public var month: String
     public var year: String
 
-    public init(day: String = "00", month: String = "00", year: String = "XXXX") {
+    public init(day: String, month: String, year: String) {
         self.day = day
         self.month = month
         self.year = year
@@ -17,7 +17,7 @@ public struct CustomDate: Sendable, Equatable, Hashable {
         year = String(characters[0..<4])
         month = characters.count >= 7 ? String(characters[5..<7]) : "00"
         day = characters.count >= 10 ? String(characters[8..<10]) : "00"
-        fixDayMonth()
+        if let numeric = Int(month), numeric > 12 { swap(&day, &month) }
     }
 
     /// Today in the user's own calendar. Deliberately not a `DateFormatter`: building one
@@ -29,12 +29,6 @@ public struct CustomDate: Sendable, Equatable, Hashable {
             month: String(format: "%02d", parts.month ?? 0),
             year: String(parts.year ?? 0)
         )
-    }
-
-    public mutating func fixDayMonth() {
-        if let numeric = Int(month), numeric > 12 {
-            swap(&day, &month)
-        }
     }
 
     /// As in deemix, each run of D, M or Y stands for the day, month or year.

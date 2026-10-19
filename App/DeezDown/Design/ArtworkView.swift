@@ -89,6 +89,11 @@ private struct ArtworkContent<Outline: InsettableShape>: View {
     }
 }
 
+extension Artwork {
+    /// People are round, records square.
+    var isRound: Bool { kind == .artist || kind == .user }
+}
+
 struct ArtworkView: View {
     var picture: Artwork
     var side: CGFloat
@@ -99,7 +104,7 @@ struct ArtworkView: View {
     var body: some View {
         ArtworkContent(
             picture: picture,
-            shape: RoundedRectangle(cornerRadius: corner, style: .continuous),
+            shape: RoundedRectangle(cornerRadius: picture.isRound ? side / 2 : corner, style: .continuous),
             requestedSize: Int(side * displayScale),
             placeholderSize: side * 0.3
         )
@@ -107,23 +112,13 @@ struct ArtworkView: View {
     }
 }
 
-struct CircularArtworkView: View {
-    var picture: Artwork
-    var side: CGFloat
-
-    var body: some View {
-        ArtworkView(picture: picture, side: side, corner: side / 2)
-    }
-}
-
 /// Sizes itself from its container rather than a fixed side, so grid cards stay square
 /// without measuring geometry (which feeds back into the layout that produced it).
 struct FillingArtworkView: View {
     var picture: Artwork
-    var isCircular = false
 
     var body: some View {
-        if isCircular {
+        if picture.isRound {
             ArtworkContent(
                 picture: picture, shape: Circle(), requestedSize: 500,
                 placeholderSize: 34, fillsContainer: true

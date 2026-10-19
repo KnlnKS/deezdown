@@ -1,39 +1,34 @@
 import DeezDownKit
 import SwiftUI
 
-enum SidebarSection: String, Hashable, CaseIterable, Identifiable {
-    static let browsing: [SidebarSection] = [.home, .search, .favorites, .charts]
-
-    case home, search, favorites, charts, downloads
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .home: "Home"
-        case .search: "Search"
-        case .favorites: "Favorites"
-        case .charts: "Charts"
-        case .downloads: "Downloads"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .home: "house"
-        case .search: "magnifyingglass"
-        case .favorites: "heart"
-        case .charts: "chart.bar"
-        case .downloads: "arrow.down.circle"
-        }
-    }
+enum SidebarSection: String {
+    case home, favorites, charts, downloads
+    /// Not listed in the sidebar: typing in the toolbar's search field leads here.
+    case search
 }
 
-/// Owns the detail column's stack so a context menu, which can't hold a NavigationLink,
-/// can still push a destination.
+/// Owns what the detail column shows, so the sidebar, the search field and a context menu
+/// (which can't hold a NavigationLink) all move it the same way.
 @Observable
 final class Navigator {
+    private(set) var section: SidebarSection? = .home
+    private(set) var query = ""
     var path = NavigationPath()
+
+    func show(_ section: SidebarSection?) {
+        self.section = section
+        query = ""
+        path = NavigationPath()
+    }
+
+    /// Typing from anywhere, even a page opened from the results, shows the results.
+    func search(_ text: String) {
+        query = text
+        guard !text.isEmpty else { return }
+        // Only real changes, so a keystroke redraws the results rather than the whole window.
+        if section != .search { section = .search }
+        if !path.isEmpty { path = NavigationPath() }
+    }
 
     func open(_ route: Route) { path.append(route) }
 }

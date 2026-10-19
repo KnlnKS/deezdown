@@ -37,13 +37,6 @@ func `featured artists are stripped from titles without eating real words`(input
     #expect(CustomDate(deezerString: "0000-00-00") == nil)
 }
 
-@Test func `a day above twelve in the month slot is swapped back`() throws {
-    var date = CustomDate(day: "03", month: "25", year: "2001")
-    date.fixDayMonth()
-    #expect(date.day == "25")
-    #expect(date.month == "03")
-}
-
 @Test func `blank synced lines borrow the timestamp of the next timed line`() {
     let lyrics = Lyrics(results: .object([
         "LYRICS_ID": "1",

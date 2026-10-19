@@ -4,11 +4,8 @@ public final class MediaDownloader: Sendable {
     private let urlSession: URLSession
     private let bodies: ResponseBodies
 
-    public init(maximumConnectionsPerHost: Int = 12) {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpAdditionalHeaders = ["User-Agent": DeezerSession.userAgent]
-        configuration.httpMaximumConnectionsPerHost = maximumConnectionsPerHost
-        configuration.timeoutIntervalForRequest = 20
+    public init() {
+        let configuration = URLSessionConfiguration.deezer(connectionsPerHost: 12, timeout: 20)
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         let bodies = ResponseBodies()
         self.bodies = bodies

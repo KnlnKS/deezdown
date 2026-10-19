@@ -2,9 +2,7 @@ import CommonCrypto
 import Foundation
 @testable import DeezDownKit
 
-/// Enciphers a buffer the way Deezer's CDN does: Blowfish CBC over the first of every three
-/// 2048-byte blocks, the rest left in the clear.
-func freshBlowfishCBC(_ block: [UInt8], key: [UInt8], operation: Int) -> [UInt8] {
+private func freshBlowfishCBC(_ block: [UInt8], key: [UInt8]) -> [UInt8] {
     let capacity = block.count
     var output = [UInt8](repeating: 0, count: capacity)
     var moved = 0
@@ -13,7 +11,7 @@ func freshBlowfishCBC(_ block: [UInt8], key: [UInt8], operation: Int) -> [UInt8]
             block.withUnsafeBytes { inBuf in
                 output.withUnsafeMutableBytes { outBuf in
                     CCCrypt(
-                        CCOperation(operation),
+                        CCOperation(kCCEncrypt),
                         CCAlgorithm(kCCAlgorithmBlowfish),
                         CCOptions(0),
                         keyBuf.baseAddress, key.count,
@@ -30,6 +28,8 @@ func freshBlowfishCBC(_ block: [UInt8], key: [UInt8], operation: Int) -> [UInt8]
     return output
 }
 
+/// Enciphers a buffer the way Deezer's CDN does: Blowfish CBC over the first of every three
+/// 2048-byte blocks, the rest left in the clear.
 func stripeEncrypt(_ plaintext: [UInt8], key: [UInt8]) -> [UInt8] {
     var out = plaintext
     var offset = 0
@@ -39,10 +39,21 @@ func stripeEncrypt(_ plaintext: [UInt8], key: [UInt8]) -> [UInt8] {
             let block = Array(plaintext[offset..<(offset + StripeCrypto.blockSize)])
             out.replaceSubrange(
                 offset..<(offset + StripeCrypto.blockSize),
-                with: freshBlowfishCBC(block, key: key, operation: kCCEncrypt)
+                with: freshBlowfishCBC(block, key: key)
             )
         }
         offset += StripeCrypto.groupSize
     }
     return out
+}
+
+/// A FLAC-looking buffer of repeatable bytes.
+func plaintext(count: Int) -> [UInt8] {
+    var bytes = Array("fLaC".utf8)
+    var seed: UInt8 = 1
+    while bytes.count < count {
+        seed = seed &* 37 &+ 11
+        bytes.append(seed)
+    }
+    return Array(bytes.prefix(count))
 }

@@ -29,7 +29,8 @@ public actor DownloadEngine {
     private var items: [String: QueueItem] = [:]
     private var order: [String] = []
     private var states: [String: ItemState] = [:]
-    private var jobs: [TrackJob] = []
+    /// A slice, so a worker takes the next job without shifting a playlist's worth behind it.
+    private var jobs: ArraySlice<TrackJob> = []
     private var heldJobs: [TrackJob] = []
     private var activeWorkers = 0
     private var directorRunning = false
@@ -93,22 +94,14 @@ public actor DownloadEngine {
             format = user.highestAvailableFormat
         }
 
-        var pending: [PendingLink] = []
-        for link in links { pending += try await expand(link) }
+        var expanded: [QueueItem] = []
+        for link in links { expanded += try await expand(link, format: format) }
 
         var added: [String] = []
-        for entry in pending {
-            let id = QueueItem.identifier(for: entry.link, format: format)
-            guard items[id] == nil else { continue }
-            var item = QueueItem(
-                id: id, link: entry.link, title: entry.title, subtitle: entry.subtitle,
-                cover: entry.cover, format: format
-            )
-            item.totalTracks = entry.trackCount
-            item.rootArtist = entry.rootArtist
-            items[id] = item
-            order.append(id)
-            added.append(id)
+        for item in expanded where items[item.id] == nil {
+            items[item.id] = item
+            order.append(item.id)
+            added.append(item.id)
         }
         guard !added.isEmpty else { return [] }
         persist(added)
@@ -118,24 +111,15 @@ public actor DownloadEngine {
         return added
     }
 
-    private struct PendingLink {
-        var link: DeezerLink
-        var title: String
-        var subtitle: String
-        var cover: Artwork
-        var trackCount: Int
-        var rootArtist: ArtistRef?
-    }
-
     /// Artist links become one queue entry per album, named from the discography listing.
     /// Reading each album's tracks here would double every request the queue is about to
     /// make anyway.
-    private func expand(_ link: DeezerLink) async throws -> [PendingLink] {
+    private func expand(_ link: DeezerLink, format: TrackFormat) async throws -> [QueueItem] {
         guard case .artist(let id, let tab) = link else {
             return [
-                PendingLink(
+                QueueItem(
                     link: link, title: link.placeholderTitle, subtitle: "Looking up tracks…",
-                    cover: Artwork(md5: "", kind: .cover), trackCount: 0
+                    cover: Artwork(md5: "", kind: .cover), format: format
                 )
             ]
         }
@@ -143,9 +127,9 @@ public actor DownloadEngine {
         let albums = try await LinkResolver(session: session).artistAlbums(id, tab: tab)
         let artist = (try? await artistTask).map(ArtistRef.init(gateway:))
         return albums.map {
-            PendingLink(
-                link: .album($0.id), title: $0.title, subtitle: $0.artist,
-                cover: $0.cover, trackCount: $0.trackCount, rootArtist: artist
+            QueueItem(
+                link: .album($0.id), title: $0.title, subtitle: $0.artist, cover: $0.cover, format: format,
+                totalTracks: $0.trackCount, rootArtist: artist
             )
         }
     }
@@ -193,7 +177,6 @@ public actor DownloadEngine {
         guard !ids.isEmpty else { return }
         for id in ids {
             items[id] = nil
-            states[id] = nil
             if let file = queueFile(id) { try? FileManager.default.removeItem(at: file) }
         }
         order.removeAll { ids.contains($0) }
@@ -209,37 +192,40 @@ public actor DownloadEngine {
         jobs.removeAll { $0.itemID == id }
         item.status = .paused
         items[id] = item
-        persist(id)
+        persist([id])
         publish()
     }
 
     public func resume(_ id: String) {
-        guard var item = items[id], item.status == .paused else { return }
-        let released = heldJobs.filter { $0.itemID == id }
-        heldJobs.removeAll { $0.itemID == id }
-        jobs.append(contentsOf: released)
-        item.status = states[id] == nil && released.isEmpty ? .queued : .downloading
-        items[id] = item
-        persist(id)
-        publish()
-        pump()
+        resume(Set([id]))
     }
 
     public func resumeAll() {
-        for id in order where items[id]?.status == .paused { resume(id) }
+        resume(Set(order))
+    }
+
+    private func resume(_ ids: Set<String>) {
+        let paused = ids.filter { items[$0]?.status == .paused }
+        guard !paused.isEmpty else { return }
+        let released = heldJobs.filter { paused.contains($0.itemID) }
+        heldJobs.removeAll { paused.contains($0.itemID) }
+        jobs.append(contentsOf: released)
+        let holding = Set(released.map(\.itemID))
+        for id in paused {
+            items[id]?.status = states[id] == nil && !holding.contains(id) ? .queued : .downloading
+        }
+        persist(paused)
+        publish()
+        pump()
     }
 
     public func retry(_ id: String) {
         guard var item = items[id], item.canRetry else { return }
         heldJobs.removeAll { $0.itemID == id }
-        item.status = .queued
-        item.completedTracks = 0
-        item.failedTracks = 0
-        item.progress = 0
-        item.issues = []
+        item.reset(to: .queued)
         items[id] = item
         states[id] = nil
-        persist(id)
+        persist([id])
         publish()
         pump()
     }
@@ -276,10 +262,7 @@ public actor DownloadEngine {
     }
 
     private func runWorker() async {
-        while !jobs.isEmpty {
-            let job = jobs.removeFirst()
-            await perform(job)
-        }
+        while let job = jobs.popFirst() { await perform(job) }
         activeWorkers -= 1
         pump()
     }
@@ -303,8 +286,7 @@ public actor DownloadEngine {
                 playlist: collection.playlist,
                 isSingleTrackDownload: collection.isSingleTrack,
                 rootArtist: item.rootArtist ?? collection.rootArtist,
-                format: item.format,
-                today: .today
+                format: item.format
             )
             // The albums start loading while the streams resolve; cancelling drops them with the state.
             states[id] = ItemState(
@@ -334,7 +316,8 @@ public actor DownloadEngine {
                     if media.track.searched {
                         states[id]?.extras.searched.append("\(media.track.mainArtist.name) - \(media.track.title)")
                     }
-                    enqueueJob(TrackJob(itemID: id, run: run, index: index, media: media))
+                    let job = TrackJob(itemID: id, run: run, index: index, media: media)
+                    if items[id]?.status == .paused { heldJobs.append(job) } else { jobs.append(job) }
                 case .failure(let failure):
                     record(id, index: index, failure: failure, track: collection.tracks[index].applying(settings))
                 }
@@ -342,8 +325,7 @@ public actor DownloadEngine {
             await finishIfDone(id)
         } catch {
             guard runs[id] == run else { return }
-            runs[id] = nil
-            states.removeValue(forKey: id)?.albums.values.forEach { $0.cancel() }
+            stopWork(for: [id])
             item = items[id] ?? item
             item.status = .failed
             item.issues = [
@@ -354,7 +336,7 @@ public actor DownloadEngine {
             ]
             items[id] = item
         }
-        persist(id)
+        persist([id])
         publish()
     }
 
@@ -373,14 +355,6 @@ public actor DownloadEngine {
             })
         }
         return Dictionary(uniqueKeysWithValues: zip(ids, tasks))
-    }
-
-    private func enqueueJob(_ job: TrackJob) {
-        if items[job.itemID]?.status == .paused {
-            heldJobs.append(job)
-        } else {
-            jobs.append(job)
-        }
     }
 
     // MARK: - Track execution
@@ -471,7 +445,7 @@ public actor DownloadEngine {
         guard isCurrent(job) else { return }
 
         do {
-            try Tagger.tag(track, format: media.format, at: file, artwork: cover, settings: settings)
+            try await Tagger.tag(track, format: media.format, at: file, artwork: cover, settings: settings)
             if settings.finderArtwork, let cover, FinderIcon.isNeeded(for: media.format) {
                 await FinderIcon.apply(cover, to: file)
             }
@@ -556,10 +530,7 @@ public actor DownloadEngine {
     /// caller finds nothing to finish, so extras are written once.
     private func finishIfDone(_ id: String) async {
         guard let state = states[id], state.remaining <= 0 else { return }
-        states[id] = nil
-        runs[id] = nil
-        transfers[id] = nil
-        state.albums.values.forEach { $0.cancel() }
+        stopWork(for: [id])
         if let item = items[id] {
             await state.extras.write(
                 for: item, from: state.collection, context: state.context, settings: settings, artworkStore: artworkStore
@@ -572,7 +543,7 @@ public actor DownloadEngine {
             ? .completed : (item.completedTracks == 0 ? .failed : .withErrors)
         item.progress = 1
         items[id] = item
-        persist(id)
+        persist([id])
         publish()
         pump()
     }
@@ -585,17 +556,13 @@ public actor DownloadEngine {
         queueDirectory?.appending(path: "\(id).json")
     }
 
-    /// Only what changed goes to disk. Rewriting every entry on every event put one file
-    /// write per queued item in the path of each finished track.
+    /// Only what changed goes to disk, so a finished track costs one write rather than one per
+    /// queued item.
     private func persist(_ ids: some Sequence<String>) {
         for id in ids {
             guard let item = items[id], let file = queueFile(id) else { continue }
             try? encoder.encode(item).write(to: file, options: .atomic)
         }
-    }
-
-    private func persist(_ id: String) {
-        persist(CollectionOfOne(id))
     }
 
     private func persistOrder() {
@@ -618,13 +585,7 @@ public actor DownloadEngine {
             guard let file = queueFile(id), let itemData = try? Data(contentsOf: file),
                 var item = try? decoder.decode(QueueItem.self, from: itemData)
             else { continue }
-            if !item.status.isFinished {
-                item.status = .paused
-                item.progress = 0
-                item.completedTracks = 0
-                item.failedTracks = 0
-                item.issues = []
-            }
+            if !item.status.isFinished { item.reset(to: .paused) }
             items[id] = item
             order.append(id)
         }

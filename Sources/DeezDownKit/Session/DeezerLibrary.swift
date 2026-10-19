@@ -9,7 +9,7 @@ public struct DeezerLibrary: Sendable {
 
     // MARK: - Search
 
-    public func search(_ query: String, limit: Int = 12) async throws -> SearchResults {
+    public func search(_ query: String, limit: Int) async throws -> SearchResults {
         let page = try await session.searchAll(query: query, limit: limit)
         return SearchResults(
             tracks: page["TRACK"]["data"].arrayValue.map(TrackSummary.init(gateway:)),
@@ -20,7 +20,7 @@ public struct DeezerLibrary: Sendable {
     }
 
     public func search<Item: Searchable>(
-        _ query: String, as type: Item.Type = Item.self, start: Int, limit: Int = 40
+        _ query: String, as type: Item.Type = Item.self, start: Int, limit: Int
     ) async throws -> (items: [Item], total: Int) {
         let (items, total) = try await session.search(query: query, kind: Item.searchKind, start: start, limit: limit)
         return (items.map(Item.init(gateway:)), total)
@@ -94,9 +94,9 @@ public struct DeezerLibrary: Sendable {
 
     /// History is one entry per play, so a record the user sat with fills the whole row;
     /// collapsing to the album keeps it varied and matches how Deezer presents it.
-    public func recentlyPlayed(limit: Int = 100) async throws -> [AlbumSummary] {
+    public func recentlyPlayed() async throws -> [AlbumSummary] {
         var seen = Set<String>()
-        return try await session.songsHistory(limit: limit)
+        return try await session.songsHistory()
             .map(AlbumSummary.init(gateway:))
             .filter { !$0.title.isEmpty && seen.insert($0.id).inserted }
     }
@@ -125,9 +125,7 @@ public struct DeezerLibrary: Sendable {
     public func charts() async throws -> SearchResults {
         let results = try await session.publicAPI("chart/0", query: ["limit": "30"])
         return SearchResults(
-            tracks: [],
             albums: results["albums"]["data"].arrayValue.map(AlbumSummary.init(publicData:)),
-            artists: [],
             playlists: results["playlists"]["data"].arrayValue.map(PlaylistSummary.init(publicData:))
         )
     }

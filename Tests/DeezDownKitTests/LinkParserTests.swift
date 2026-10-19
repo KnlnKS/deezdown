@@ -28,13 +28,7 @@ func `every deezer link shape deemix accepts is parsed`(input: String, expected:
     #expect(throws: LinkParseError.self) { try LinkParser.parse("https://www.deezer.com/album/not-a-number") }
 }
 
-@Test func `pasted batches split on whitespace and semicolons`() {
-    let input = "https://deezer.com/track/1; https://deezer.com/track/2\nhttps://deezer.com/track/3"
-    #expect(LinkParser.split(input).count == 3)
-}
-
 @Test func `queue identity encodes type, id and bitrate so two qualities coexist`() {
-    #expect(DeezerLink.album("302127").kind == "album")
-    #expect(DeezerLink.artist("27", tab: .single).identifier == "27_single")
-    #expect(DeezerLink.track("3135556").webURL?.absoluteString == "https://www.deezer.com/track/3135556")
+    #expect(QueueItem.identifier(for: .album("302127"), format: .flac) == "album_302127_9")
+    #expect(QueueItem.identifier(for: .artist("27", tab: .single), format: .mp3_320) == "artist_27_single_3")
 }

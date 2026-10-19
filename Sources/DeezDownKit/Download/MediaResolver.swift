@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ResolvedMedia: Sendable, Equatable {
+public struct ResolvedMedia: Sendable {
     public var track: Track
     public var format: TrackFormat
     public var urls: [URL]
@@ -10,9 +10,6 @@ public struct ResolvedMedia: Sendable, Equatable {
 /// ceiling and walking the quality ladder a whole tier at a time rather than a track at a time.
 public struct MediaResolver: Sendable {
     public static let batchLimit = 100
-
-    /// A stream per track once one is found; why the rest failed is kept beside it.
-    private typealias Outcomes = [ResolvedMedia?]
 
     private let session: DeezerSession
     private let settings: DownloadSettings
@@ -66,10 +63,10 @@ public struct MediaResolver: Sendable {
 
     /// Walks the ladder for every track at once; local uploads only ever have their own MP3.
     private func streams(for tracks: [Track], format preferred: TrackFormat) async throws
-        -> (Outcomes, [Int: DownloadFailure.Reason])
+        -> ([ResolvedMedia?], [Int: DownloadFailure.Reason])
     {
         guard let user = await session.user else { throw DeezerError.notLoggedIn }
-        var outcomes = Outcomes(repeating: nil, count: tracks.count)
+        var outcomes = [ResolvedMedia?](repeating: nil, count: tracks.count)
         var lastReason: [Int: DownloadFailure.Reason] = [:]
         for (index, track) in tracks.enumerated() where !track.isEncoded && !track.isLocal {
             lastReason[index] = .notEncoded
@@ -111,7 +108,7 @@ public struct MediaResolver: Sendable {
     /// stream, as deemix's parseEssentialData does: the tags still describe the track that was
     /// asked for.
     private func adopt(
-        _ standIns: [(Int, Track)], for originals: [Track], into outcomes: inout Outcomes,
+        _ standIns: [(Int, Track)], for originals: [Track], into outcomes: inout [ResolvedMedia?],
         format preferred: TrackFormat
     ) async throws {
         var standIns = standIns
@@ -233,15 +230,15 @@ extension Track {
 }
 
 extension Array where Element: Sendable {
-    /// Every element through `transform` with a few in flight at once, so a long list isn't
+    /// Every element through `transform` with `width` in flight at once, so a long list isn't
     /// one round trip after another. Results keep the elements' order.
-    fileprivate func concurrentMap<Value: Sendable>(
-        _ transform: @escaping @Sendable (Element) async -> Value
+    func concurrentMap<Value: Sendable>(
+        width: Int = 4, _ transform: @escaping @Sendable (Element) async -> Value
     ) async -> [Value] {
         await withTaskGroup(of: (Int, Value).self) { group in
             var values = [Value?](repeating: nil, count: count)
             for (index, element) in enumerated() {
-                if index >= 4, let done = await group.next() { values[done.0] = done.1 }
+                if index >= width, let done = await group.next() { values[done.0] = done.1 }
                 group.addTask { (index, await transform(element)) }
             }
             for await done in group { values[done.0] = done.1 }

@@ -170,14 +170,13 @@ public enum LinkParser {
     }
 
     /// Short links only reveal their target by following the redirect.
-    public static func resolve(_ input: String, using session: URLSession = .shared) async throws -> DeezerLink {
+    public static func resolve(_ input: String) async throws -> DeezerLink {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isShortLink(text), let url = URL(string: text) else { return try parse(text) }
 
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
         request.setValue(DeezerSession.userAgent, forHTTPHeaderField: "User-Agent")
-        guard let (_, response) = try? await session.data(for: request), let final = response.url else {
+        guard let (_, response) = try? await URLSession.shared.data(for: request), let final = response.url else {
             throw LinkParseError.notRecognized(input)
         }
         return try parse(final.absoluteString)
@@ -185,15 +184,8 @@ public enum LinkParser {
 
     /// A short link costs a redirect, so they are followed together; results keep the input order.
     public static func resolveAll(_ inputs: [String]) async -> [Result<DeezerLink, any Error>] {
-        await withTaskGroup(of: (Int, Result<DeezerLink, any Error>).self) { group in
-            for (index, input) in inputs.enumerated() {
-                group.addTask {
-                    do { return (index, .success(try await resolve(input))) } catch { return (index, .failure(error)) }
-                }
-            }
-            var results = [Result<DeezerLink, any Error>?](repeating: nil, count: inputs.count)
-            for await (index, result) in group { results[index] = result }
-            return results.compactMap { $0 }
+        await inputs.concurrentMap(width: inputs.count) { input in
+            do { return .success(try await resolve(input)) } catch { return .failure(error) }
         }
     }
 

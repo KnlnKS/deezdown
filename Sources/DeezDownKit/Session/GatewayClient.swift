@@ -2,16 +2,15 @@ import Foundation
 
 extension DeezerSession {
     public func trackData(id: String) async throws -> JSONValue {
-        guard let numeric = Int(id), numeric > 0 else {
-            return try await gateway("song.getData", ["SNG_ID": .string(id)])
+        if (Int(id) ?? 0) > 0 {
+            let page = try await gateway("deezer.pageTrack", ["SNG_ID": .string(id)])
+            if case .object(var data) = page["DATA"] {
+                if page["LYRICS"] != .null { data["LYRICS"] = page["LYRICS"] }
+                if page["ISRC"] != .null { data["ALBUM_FALLBACK"] = page["ISRC"] }
+                return .object(data)
+            }
         }
-        let page = try await gateway("deezer.pageTrack", ["SNG_ID": .string(id)])
-        guard case .object(var data) = page["DATA"] else {
-            return try await gateway("song.getData", ["SNG_ID": .string(id)])
-        }
-        if page["LYRICS"] != .null { data["LYRICS"] = page["LYRICS"] }
-        if page["ISRC"] != .null { data["ALBUM_FALLBACK"] = page["ISRC"] }
-        return .object(data)
+        return try await gateway("song.getData", ["SNG_ID": .string(id)])
     }
 
     public func trackList(ids: [String]) async throws -> [JSONValue] {
@@ -53,12 +52,13 @@ extension DeezerSession {
         try await gateway("deezer.pageArtist", ["ART_ID": .string(id), "lang": "en", "header": true, "tab": 0])
     }
 
-    public func artistTopTracks(id: String, limit: Int = 100) async throws -> [JSONValue] {
-        let results = try await gateway("artist.getTopTrack", ["ART_ID": .string(id), "nb": .int(limit)])
+    public func artistTopTracks(id: String) async throws -> [JSONValue] {
+        let results = try await gateway("artist.getTopTrack", ["ART_ID": .string(id), "nb": 100])
         return results["data"].arrayValue
     }
 
-    public func artistDiscography(id: String, pageSize: Int = 100) async throws -> [JSONValue] {
+    public func artistDiscography(id: String) async throws -> [JSONValue] {
+        let pageSize = 100
         var albums: [JSONValue] = []
         var seen = Set<String>()
         var start = 0
@@ -84,7 +84,7 @@ extension DeezerSession {
         try await gateway("song.getLyrics", ["SNG_ID": .string(trackID)])
     }
 
-    public func search(query: String, kind: SearchKind, start: Int = 0, limit: Int = 40) async throws -> (
+    public func search(query: String, kind: SearchKind, start: Int = 0, limit: Int) async throws -> (
         items: [JSONValue], total: Int
     ) {
         let results = try await gateway(
@@ -97,7 +97,7 @@ extension DeezerSession {
         return (results["data"].arrayValue, results["total"].intValue ?? 0)
     }
 
-    public func searchAll(query: String, limit: Int = 10) async throws -> JSONValue {
+    public func searchAll(query: String, limit: Int) async throws -> JSONValue {
         try await gateway(
             "deezer.pageSearch",
             [
@@ -107,19 +107,16 @@ extension DeezerSession {
         )
     }
 
-    public func profileTab(userID: String, tab: ProfileTab, limit: Int = 200) async throws -> [JSONValue] {
+    public func profileTab(userID: String, tab: ProfileTab) async throws -> [JSONValue] {
         let results = try await gateway(
-            "deezer.pageProfile",
-            ["USER_ID": .string(userID), "tab": .string(tab.rawValue), "nb": .int(limit)]
+            "deezer.pageProfile", ["USER_ID": .string(userID), "tab": .string(tab.rawValue), "nb": 200]
         )
         return results["TAB"][tab.rawValue]["data"].arrayValue
     }
 
     /// The listening history behind Deezer's own "recently played" row.
-    public func songsHistory(limit: Int = 100, start: Int = 0) async throws -> [JSONValue] {
-        let results = try await gateway(
-            "user.getSongsHistory", ["nb": .int(limit), "start": .int(start)]
-        )
+    public func songsHistory() async throws -> [JSONValue] {
+        let results = try await gateway("user.getSongsHistory", ["nb": 100, "start": 0])
         return results["data"].arrayValue
     }
 
@@ -129,10 +126,8 @@ extension DeezerSession {
     }
 }
 
-public enum SearchKind: String, Sendable, CaseIterable, Identifiable {
+public enum SearchKind: String, Sendable, CaseIterable {
     case track, album, artist, playlist
-
-    public var id: String { rawValue }
 
     var gatewayOutput: String {
         switch self {
@@ -153,7 +148,7 @@ public enum SearchKind: String, Sendable, CaseIterable, Identifiable {
     }
 }
 
-public enum ProfileTab: String, Sendable, CaseIterable {
+public enum ProfileTab: String, Sendable {
     case playlists, albums, artists, loved
 }
 
@@ -174,10 +169,6 @@ extension DeezerSession {
         return bpm > 0 ? bpm : nil
     }
 
-    public func publicTrack(isrc: String) async throws -> JSONValue {
-        try await publicAPI("track/isrc:\(isrc)")
-    }
-
     public func publicAlbum(upc: String) async throws -> JSONValue {
         if let direct = try? await publicAPI("album/upc:\(upc)"), direct["id"] != .null { return direct }
         let stripped = String(upc.drop { $0 == "0" })
@@ -185,9 +176,9 @@ extension DeezerSession {
     }
 
     /// deemix's search fallback: progressively loosen the query until Deezer matches something.
-    public func trackID(artist: String, title: String, album: String?) async -> String? {
+    public func trackID(artist: String, title: String, album: String) async -> String? {
         var attempts: [String] = []
-        if let album, !album.isEmpty {
+        if !album.isEmpty {
             attempts.append("artist:\"\(artist)\" track:\"\(title)\" album:\"\(album)\"")
         }
         attempts.append("artist:\"\(artist)\" track:\"\(title)\"")

@@ -15,24 +15,20 @@ public struct SettingsStore: Sendable {
         var settings = DownloadSettings()
         if let stored = try? Data(contentsOf: paths.settingsFile),
             let overlay = try? JSONDecoder().decode(JSONValue.self, from: stored),
-            let base = try? JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(settings))
+            let base = try? settings.json()
         {
-            if let decoded = Self.decode(base.merging(overlay)) {
+            if let decoded = DownloadSettings(json: base.merging(overlay)) {
                 settings = decoded
             } else {
                 var tree = base
                 for leaf in overlay.leaves {
                     let candidate = tree.merging(leaf)
-                    if let decoded = Self.decode(candidate) { (tree, settings) = (candidate, decoded) }
+                    if let decoded = DownloadSettings(json: candidate) { (tree, settings) = (candidate, decoded) }
                 }
             }
         }
         settings.repair()
         return settings
-    }
-
-    private static func decode(_ tree: JSONValue) -> DownloadSettings? {
-        try? JSONDecoder().decode(DownloadSettings.self, from: JSONEncoder().encode(tree))
     }
 
     public func save(_ settings: DownloadSettings) throws {
@@ -42,6 +38,20 @@ public struct SettingsStore: Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(settings).write(to: paths.settingsFile, options: .atomic)
+    }
+}
+
+extension DownloadSettings {
+    /// The settings as the config file's tree, which a partial config can be merged onto.
+    public func json() throws -> JSONValue {
+        try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(self))
+    }
+
+    public init?(json: JSONValue) {
+        guard let data = try? JSONEncoder().encode(json),
+            let settings = try? JSONDecoder().decode(DownloadSettings.self, from: data)
+        else { return nil }
+        self = settings
     }
 }
 

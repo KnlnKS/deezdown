@@ -144,4 +144,10 @@ extension JSONValue {
         guard case .object(let fields) = self, !fields.isEmpty else { return [self] }
         return fields.flatMap { key, value in value.leaves.map { .object([key: $0]) } }
     }
+
+    /// A gateway record is explicit when the status under its content key says so, or, lacking
+    /// one, when its fallback flag does.
+    func isExplicit(_ content: String, else fallback: String? = nil) -> Bool {
+        (self[content]["EXPLICIT_LYRICS_STATUS"].intValue ?? fallback.flatMap { self[$0].intValue }) == 1
+    }
 }

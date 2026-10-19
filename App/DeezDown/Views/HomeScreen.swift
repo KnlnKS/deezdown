@@ -3,10 +3,9 @@ import SwiftUI
 
 struct HomeScreen: View {
     @Environment(AppModel.self) private var model
-    @State private var state: LoadState<HomeFeed> = .loading
 
     var body: some View {
-        AsyncContent(state: state, retry: { Task { await load(force: true) } }) { feed in
+        Fetched("home", refreshable: true) { try await $0.home() } content: { feed in
             ScreenScroll {
                 greeting
 
@@ -15,11 +14,11 @@ struct HomeScreen: View {
                 }
 
                 if !feed.playlists.isEmpty {
-                    CardShelf("Your Playlists", items: feed.playlists, rows: 1) { MediaCard($0) }
+                    CardShelf("Your Playlists", items: feed.playlists) { MediaCard($0) }
                 }
 
                 if !feed.artists.isEmpty {
-                    CardShelf("Artists You Follow", items: feed.artists, rows: 1) { MediaCard($0) }
+                    CardShelf("Artists You Follow", items: feed.artists) { MediaCard($0) }
                 }
 
                 if !feed.topAlbums.isEmpty {
@@ -27,17 +26,10 @@ struct HomeScreen: View {
                 }
 
                 if !feed.topPlaylists.isEmpty {
-                    CardShelf("Popular Playlists", items: feed.topPlaylists, rows: 1) { MediaCard($0, subtitle: $0.owner) }
+                    CardShelf("Popular Playlists", items: feed.topPlaylists) { MediaCard($0, subtitle: $0.owner) }
                 }
             }
         }
-        .navigationTitle("Home")
-        .toolbar {
-            ToolbarItem {
-                RefreshButton { Task { await load(force: true) } }
-            }
-        }
-        .task { await load() }
     }
 
     private var greeting: some View {
@@ -49,9 +41,5 @@ struct HomeScreen: View {
             Text("Search for anything, or paste a Deezer link to download it.")
                 .foregroundStyle(.secondary)
         }
-    }
-
-    private func load(force: Bool = false) async {
-        await model.load("home", force: force, into: { state = $0 }) { try await model.library.home() }
     }
 }

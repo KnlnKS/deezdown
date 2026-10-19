@@ -25,6 +25,11 @@ public struct Artwork: Sendable, Codable, Equatable, Hashable {
         self.kind = kind
     }
 
+    init(playlist gateway: JSONValue) {
+        md5 = gateway["PLAYLIST_PICTURE"].stringValue ?? ""
+        kind = Kind(rawValue: gateway["PICTURE_TYPE"].stringValue ?? "playlist") ?? .playlist
+    }
+
     /// Deezer retired `e-cdns-images.dzcdn.net`; it now answers 403 for every request.
     static let host = "https://cdn-images.dzcdn.net"
 

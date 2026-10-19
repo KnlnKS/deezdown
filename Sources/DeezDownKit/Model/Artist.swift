@@ -14,7 +14,7 @@ public enum ArtistRole: String, Sendable, Codable, Equatable {
     }
 }
 
-public struct ArtistRef: Sendable, Codable, Equatable, Hashable, Identifiable {
+public struct ArtistRef: Sendable, Codable, Equatable {
     public var id: String
     public var name: String
     public var picture: Artwork

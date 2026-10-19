@@ -4,11 +4,10 @@ public enum QueueStatus: String, Sendable, Codable, Equatable {
     case queued, resolving, downloading, paused, completed, withErrors, failed, canceled
 
     public var isFinished: Bool {
-        [.completed, .withErrors, .failed, .canceled].contains(self)
-    }
-
-    public var isActive: Bool {
-        self == .resolving || self == .downloading
+        switch self {
+        case .completed, .withErrors, .failed, .canceled: true
+        case .queued, .resolving, .downloading, .paused: false
+        }
     }
 }
 
@@ -35,15 +34,19 @@ public struct QueueItem: Sendable, Codable, Equatable, Identifiable {
     public var destination: URL?
     public var rootArtist: ArtistRef?
 
-    public init(id: String, link: DeezerLink, title: String, subtitle: String, cover: Artwork, format: TrackFormat) {
-        self.id = id
+    public init(
+        link: DeezerLink, title: String, subtitle: String, cover: Artwork, format: TrackFormat,
+        totalTracks: Int = 0, rootArtist: ArtistRef? = nil
+    ) {
+        id = Self.identifier(for: link, format: format)
         self.link = link
         self.title = title
         self.subtitle = subtitle
         self.cover = cover
         self.format = format
+        self.totalTracks = totalTracks
+        self.rootArtist = rootArtist
         status = .queued
-        totalTracks = 0
         completedTracks = 0
         failedTracks = 0
         progress = 0
@@ -55,8 +58,16 @@ public struct QueueItem: Sendable, Codable, Equatable, Identifiable {
         "\(link.kind)_\(link.identifier)_\(format.rawValue)"
     }
 
+    mutating func reset(to status: QueueStatus) {
+        self.status = status
+        completedTracks = 0
+        failedTracks = 0
+        progress = 0
+        issues = []
+    }
+
     public var canRetry: Bool { status == .withErrors || status == .failed || status == .canceled }
-    public var canPause: Bool { status == .queued || status.isActive }
+    public var canPause: Bool { !status.isFinished && status != .paused }
     public var canResume: Bool { status == .paused }
     /// Finished with nothing to look into; failures stay until they are read.
     public var canClear: Bool { status == .completed || status == .canceled }

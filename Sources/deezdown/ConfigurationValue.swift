@@ -6,16 +6,11 @@ struct ConfigurationValue {
     private let root: [String: JSONValue]
 
     init(_ settings: DownloadSettings) throws {
-        root = try JSONDecoder().decode([String: JSONValue].self, from: JSONEncoder().encode(settings))
+        root = try settings.json().objectValue
     }
 
     func render(key: String?) throws -> String {
-        let value: JSONValue
-        if let key {
-            value = try lookup(key)
-        } else {
-            value = .object(root)
-        }
+        let value = try key.map(lookup) ?? .object(root)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return String(decoding: try encoder.encode(value), as: UTF8.self)
@@ -31,9 +26,7 @@ struct ConfigurationValue {
             default: "one of its listed values"
             }
         let overlay = key.split(separator: ".").reversed().reduce(JSONValue.string(input)) { .object([String($1): $0]) }
-        guard
-            var settings = try? JSONDecoder().decode(
-                DownloadSettings.self, from: JSONEncoder().encode(JSONValue.object(root).merging(overlay)))
+        guard var settings = DownloadSettings(json: JSONValue.object(root).merging(overlay))
         else { throw ValidationError("\(key) expects \(expected).") }
         settings.repair()
         return settings

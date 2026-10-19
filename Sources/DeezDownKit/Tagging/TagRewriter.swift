@@ -32,3 +32,15 @@ enum TagRewriter {
         _ = try manager.replaceItemAt(url, withItemAt: rewritten)
     }
 }
+
+extension [UInt8] {
+    /// The low `count` bytes of `value`, most significant first.
+    init(bigEndian value: Int, count: Int = 4) {
+        self = (0..<count).reversed().map { UInt8(truncatingIfNeeded: value >> ($0 * 8)) }
+    }
+
+    /// The low four bytes of `value`, least significant first.
+    init(littleEndian value: Int) {
+        self = (0..<4).map { UInt8(truncatingIfNeeded: value >> ($0 * 8)) }
+    }
+}

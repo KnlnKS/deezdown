@@ -5,11 +5,10 @@ struct ArtistScreen: View {
     @Environment(AppModel.self) private var model
     var id: String
 
-    @State private var state: LoadState<ArtistDetail> = .loading
     @State private var tab: ArtistTab = .all
 
     var body: some View {
-        AsyncContent(state: state, retry: { Task { await load() } }) { detail in
+        Fetched("artist-\(id)") { try await $0.artist(id: id) } content: { detail in
             ScreenScroll {
                 header(detail)
 
@@ -53,14 +52,7 @@ struct ArtistScreen: View {
                 }
             }
         }
-        .navigationTitle(title)
         .environment(\.currentRoute, .artist(id))
-        .task(id: id) { await load() }
-    }
-
-    private var title: String {
-        if case .loaded(let detail) = state { return detail.summary.name }
-        return "Artist"
     }
 
     private func subtitle(for album: AlbumSummary) -> String {
@@ -74,24 +66,11 @@ struct ArtistScreen: View {
     }
 
     private func header(_ detail: ArtistDetail) -> some View {
-        HStack(alignment: .bottom, spacing: 20) {
-            CircularArtworkView(picture: detail.summary.picture, side: 190)
-                .shadow(color: .black.opacity(0.28), radius: 22, y: 10)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Eyebrow(text: "Artist")
-                DisplayTitle(text: detail.summary.name)
-                Text("\(detail.summary.fans.formatted()) fans • \(detail.albums[.all]?.count ?? 0) releases")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                DownloadButton(link: .artist(id, tab: tab), title: "Download \(tab.title)")
-                    .padding(.top, 8)
-            }
-            Spacer(minLength: 0)
+        DetailHeader(
+            picture: detail.summary.picture, kind: "Artist", title: detail.summary.name,
+            link: .artist(id, tab: tab), download: "Download \(tab.title)"
+        ) {
+            Text("\(detail.summary.fans.formatted()) fans • \(detail.albums[.all]?.count ?? 0) releases")
         }
-    }
-
-    private func load() async {
-        await model.load("artist-\(id)", into: { state = $0 }) { try await model.library.artist(id: id) }
     }
 }

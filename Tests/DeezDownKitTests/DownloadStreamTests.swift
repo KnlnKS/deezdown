@@ -15,16 +15,6 @@ private func fixture(_ bytes: [UInt8], named name: String) throws -> URL {
     return url
 }
 
-private func plaintext(count: Int) -> [UInt8] {
-    var bytes = Array("fLaC".utf8)
-    var seed: UInt8 = 1
-    while bytes.count < count {
-        seed = seed &* 37 &+ 11
-        bytes.append(seed)
-    }
-    return Array(bytes.prefix(count))
-}
-
 @Suite struct DownloadStream {
     let trackID = "3135556"
 

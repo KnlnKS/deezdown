@@ -35,15 +35,10 @@ struct GlobalOptions: ParsableArguments {
 
     private static func typedARL() throws -> String {
         guard isatty(FileHandle.standardInput.fileDescriptor) == 1 else {
-            FileHandle.standardError.write(
-                Data(
-                    """
-                    Not signed in. Run `deezdown login --arl <ARL>`, or run deezdown from a \
-                    terminal to be prompted.\n
-                    """.utf8))
+            printError("Not signed in. Run `deezdown login --arl <ARL>`, or run deezdown from a terminal to be prompted.")
             throw ExitCode.failure
         }
-        FileHandle.standardError.write(Data("Enter your ARL: ".utf8))
+        printError("Enter your ARL: ", terminator: "")
         guard let typed = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines), !typed.isEmpty else {
             throw ValidationError("No ARL entered.")
         }
@@ -76,7 +71,7 @@ struct Logout: ParsableCommand {
     }
 }
 
-struct Config: AsyncParsableCommand {
+struct Config: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Show or change persistent download settings.",
         subcommands: [Get.self, Set.self, Reset.self]
@@ -153,17 +148,8 @@ struct Download: AsyncParsableCommand {
             throw ValidationError("Pass at least one Deezer link.")
         }
         if let bitrate, TrackFormat.parse(bitrate) == nil {
-            FileHandle.standardError.write(
-                Data(
-                    """
-                    Unknown bitrate "\(bitrate)". Use one of:
-                      flac | lossless | 9
-                      mp3_320 | mp3 | 320 | 3
-                      mp3_128 | 128 | 1
-                      360_hq | mp4_ra3 | 15
-                      360_mq | mp4_ra2 | 14
-                      360_lq | mp4_ra1 | 13\n
-                    """.utf8))
+            printError("Unknown bitrate \"\(bitrate)\". Use one of:")
+            for (_, names) in TrackFormat.aliases { printError("  " + names.joined(separator: " | ")) }
             throw ExitCode.failure
         }
     }
@@ -187,7 +173,7 @@ struct Download: AsyncParsableCommand {
             switch result {
             case .success(let resolved): parsed.append(resolved)
             case .failure(let error):
-                FileHandle.standardError.write(Data("Skipping \(link): \(error.localizedDescription)\n".utf8))
+                printError("Skipping \(link): \(error.localizedDescription)")
             }
         }
         guard try await engine.enqueue(parsed, format: format).count > 0 else { throw ExitCode.failure }
@@ -202,4 +188,9 @@ struct Download: AsyncParsableCommand {
         reporter.summarize(queue)
         if queue.contains(where: { $0.status == .failed }) { throw ExitCode.failure }
     }
+}
+
+/// Kept off standard output, which may be piped.
+func printError(_ message: String, terminator: String = "\n") {
+    FileHandle.standardError.write(Data((message + terminator).utf8))
 }

@@ -2,7 +2,9 @@ import Foundation
 
 public enum NameSanitizer {
     static let illegal: Set<Character> = ["\0", "/", "\\", ":", "*", "?", "\"", "<", ">", "|"]
-    public static let segmentLimit = 200
+    /// APFS takes 255 UTF-8 bytes a name, and a track's name grows on disk by up to a Keep Both
+    /// counter, its extension and the suffix it is written under.
+    public static let segmentLimit = 255 - " (999).flac.retag".utf8.count
 
     /// Deezer titles routinely contain characters HFS+/APFS or Finder will not accept.
     public static func fixName(_ name: String, replacer: String) -> String {
@@ -13,9 +15,14 @@ public enum NameSanitizer {
         return output.precomposedStringWithCanonicalMapping
     }
 
-    /// Path components have a hard byte limit; truncate rather than fail at write time.
+    /// Path components have a hard byte limit; cut whole characters rather than fail at write time.
     public static func fixLongName(_ name: String) -> String {
-        String(name.prefix(segmentLimit))
+        guard name.utf8.count > segmentLimit else { return name }
+        var bytes = 0
+        return String(name.prefix { character in
+            bytes += character.utf8.count
+            return bytes <= segmentLimit
+        })
     }
 
     /// A component that is only dots or spaces is invisible to Finder and breaks path joins.

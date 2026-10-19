@@ -8,10 +8,8 @@ public enum TemplateEngine {
     /// end up with a double space where the feature or advisory marker would have been.
     static let spaceEating: Set<String> = ["featartists", "explicit"]
 
-    /// One pass over the template. Sweeping the whole string once per variable was both
-    /// slower and order-dependent: a value that happened to contain a token was substituted
-    /// again or not depending on how the dictionary happened to be laid out. Only the values
-    /// the template uses are escaped.
+    /// One pass over the template, so a value that contains a token is never substituted in
+    /// turn. Only the values the template uses are escaped.
     public static func render(
         _ template: String, _ variables: TemplateVariables, escape: (String) -> String = { $0 }
     ) -> String {

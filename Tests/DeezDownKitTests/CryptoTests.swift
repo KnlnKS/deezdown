@@ -16,13 +16,7 @@ import Testing
 ])
 func `a reset cryptor decrypts identically to a fresh cryptor per block`(size: Int) throws {
     let key = StripeCrypto.blowfishKey(trackID: "3135556")
-    var plaintext = Array("fLaC".utf8)
-    var seed: UInt8 = 1
-    while plaintext.count < size {
-        seed = seed &* 37 &+ 11
-        plaintext.append(seed)
-    }
-    plaintext = Array(plaintext.prefix(size))
+    let plaintext = plaintext(count: size)
 
     let ciphertext = stripeEncrypt(plaintext, key: key)
     let decryptor = try StripeDecryptor(trackID: "3135556")
@@ -54,15 +48,3 @@ func `a reset cryptor decrypts identically to a fresh cryptor per block`(size: I
     kept += try keptDecryptor.finish()
     #expect(kept == mp4)
 }
-
-@Test func `bitrate aliases resolve the way the deemix cli resolves them`() {
-    #expect(TrackFormat.parse("flac") == .flac)
-    #expect(TrackFormat.parse("lossless") == .flac)
-    #expect(TrackFormat.parse("320") == .mp3_320)
-    #expect(TrackFormat.parse("mp3") == .mp3_320)
-    #expect(TrackFormat.parse("128") == .mp3_128)
-    #expect(TrackFormat.parse("360") == .mp4ra3)
-    #expect(TrackFormat.parse("360_lq") == .mp4ra1)
-    #expect(TrackFormat.parse("nonsense") == nil)
-}
-

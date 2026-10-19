@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Playlist: Sendable, Equatable, Identifiable {
+public struct Playlist: Sendable, Equatable {
     public var id: String
     public var title: String
     public var picture: Artwork
@@ -27,10 +27,7 @@ public struct Playlist: Sendable, Equatable, Identifiable {
     init(gateway: JSONValue) {
         id = gateway["PLAYLIST_ID"].stringValue ?? "0"
         title = gateway["TITLE"].stringValue ?? ""
-        picture = Artwork(
-            md5: gateway["PLAYLIST_PICTURE"].stringValue ?? "",
-            kind: Artwork.Kind(rawValue: gateway["PICTURE_TYPE"].stringValue ?? "playlist") ?? .playlist
-        )
+        picture = Artwork(playlist: gateway)
         owner = gateway["PARENT_USERNAME"].stringValue ?? ""
         ownerID = gateway["PARENT_USER_ID"].stringValue ?? "0"
         trackCount = gateway["NB_SONG"].intValue ?? 0
@@ -38,6 +35,6 @@ public struct Playlist: Sendable, Equatable, Identifiable {
             CustomDate(deezerString: gateway["DATE_ADD"].stringValue)
             ?? CustomDate(deezerString: gateway["DATE_CREATE"].stringValue)
             ?? CustomDate(deezerString: gateway["DATE_MOD"].stringValue)
-        explicit = (gateway["EXPLICIT_PLAYLIST_CONTENT"]["EXPLICIT_LYRICS_STATUS"].intValue ?? 0) == 1
+        explicit = gateway.isExplicit("EXPLICIT_PLAYLIST_CONTENT")
     }
 }

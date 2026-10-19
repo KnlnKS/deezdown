@@ -3,14 +3,15 @@ import Foundation
 public enum Tagger {
     static let involvedRoles = ["author", "engineer", "mixer", "producer", "writer"]
 
+    /// Tagging rewrites the whole file, so it runs off the caller's actor.
+    @concurrent
     public static func tag(
         _ track: Track,
         format: TrackFormat,
         at url: URL,
         artwork: Data?,
         settings: DownloadSettings
-    ) throws {
-        let artwork = settings.tags.cover && artwork?.isEmpty == false ? artwork : nil
+    ) async throws {
         switch format.fileExtension {
         case "mp3": try tagMP3(track, at: url, artwork: artwork, settings: settings)
         case "flac": try tagFLAC(track, at: url, artwork: artwork, settings: settings)

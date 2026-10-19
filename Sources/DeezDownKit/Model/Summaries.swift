@@ -33,8 +33,7 @@ public struct TrackSummary: Searchable, Equatable, Hashable {
         albumID = gateway["ALB_ID"].stringValue ?? "0"
         cover = Artwork(md5: gateway["ALB_PICTURE"].stringValue ?? "", kind: .cover)
         duration = gateway["DURATION"].intValue ?? 0
-        explicit = (gateway["EXPLICIT_TRACK_CONTENT"]["EXPLICIT_LYRICS_STATUS"].intValue
-            ?? gateway["EXPLICIT_LYRICS"].intValue ?? 0) == 1
+        explicit = gateway.isExplicit("EXPLICIT_TRACK_CONTENT", else: "EXPLICIT_LYRICS")
         position = gateway["TRACK_POSITION"].intValue ?? gateway["TRACK_NUMBER"].intValue
         discNumber = gateway["DISK_NUMBER"].intValue ?? 1
         previewURL = gateway["MEDIA"].arrayValue
@@ -68,7 +67,7 @@ public struct AlbumSummary: Searchable, Equatable, Hashable {
             (gateway["DIGITAL_RELEASE_DATE"].stringValue ?? gateway["PHYSICAL_RELEASE_DATE"].stringValue
                 ?? gateway["ORIGINAL_RELEASE_DATE"].stringValue ?? "").prefix(4)
         )
-        explicit = (gateway["EXPLICIT_ALBUM_CONTENT"]["EXPLICIT_LYRICS_STATUS"].intValue ?? 0) == 1
+        explicit = gateway.isExplicit("EXPLICIT_ALBUM_CONTENT")
         recordType = RecordType(gatewayType: gateway["TYPE"].stringValue, publicType: nil)
     }
 
@@ -117,10 +116,7 @@ public struct PlaylistSummary: Searchable, Equatable, Hashable {
         id = gateway["PLAYLIST_ID"].stringValue ?? "0"
         title = gateway["TITLE"].stringValue ?? ""
         owner = gateway["PARENT_USERNAME"].stringValue ?? ""
-        picture = Artwork(
-            md5: gateway["PLAYLIST_PICTURE"].stringValue ?? "",
-            kind: Artwork.Kind(rawValue: gateway["PICTURE_TYPE"].stringValue ?? "playlist") ?? .playlist
-        )
+        picture = Artwork(playlist: gateway)
         trackCount = gateway["NB_SONG"].intValue ?? 0
         description = gateway["DESCRIPTION"].stringValue ?? ""
     }
@@ -176,4 +172,3 @@ public struct ArtistDetail: Sendable, Equatable {
     public var topTracks: [TrackSummary]
     public var albums: [ArtistTab: [AlbumSummary]]
 }
-

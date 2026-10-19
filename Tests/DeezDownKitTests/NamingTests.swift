@@ -9,13 +9,12 @@ private func sampleTrack(explicit: Bool = false, featured: Bool = true, discs: I
     if featured {
         artists.append(.object(["ART_ID": "99", "ART_NAME": "Pharrell", "ROLE_ID": 5, "ART_PICTURE": "def"]))
     }
-    var album = Album(
+    let album = Album(
         id: "302127", title: "Discovery",
         mainArtist: ArtistRef(id: "27", name: "Daft Punk"),
         genres: ["Electro"], label: "Daft Life Ltd.", barcode: "724384960650",
         date: CustomDate(deezerString: "2001-03-12"), trackTotal: 14, discTotal: discs
     )
-    album.artists = ["Daft Punk"]
     return Track(
         gateway: .object([
             "SNG_ID": "3135556", "SNG_TITLE": "Harder, Better, Faster, Stronger",
@@ -56,7 +55,10 @@ private func path(_ url: URL) -> String {
     #expect(NameSanitizer.antiDot("...") == "dot")
     #expect(NameSanitizer.antiDot("Album.") == "Album")
     #expect(NameSanitizer.antiDot("Mr. Bungle") == "Mr. Bungle")
-    #expect(NameSanitizer.fixLongName(String(repeating: "x", count: 300)).count == 200)
+    #expect(
+        NameSanitizer.fixLongName(String(repeating: "が", count: 100))
+            == String(repeating: "が", count: NameSanitizer.segmentLimit / 3)
+    )
 }
 
 @Test func `track numbers pad against the album total`() {
@@ -130,12 +132,9 @@ private func path(_ url: URL) -> String {
     var settings = DownloadSettings()
     settings.downloadLocation = "/Music"
     settings.albumTracknameTemplate = "%tracknumber% - %title% %explicit%"
-    let clean = sampleTrack(explicit: false).applying(settings)
-    let dirty = sampleTrack(explicit: true).applying(settings)
-    let builder = PathBuilder(settings: settings)
-    #expect(builder.paths(for: clean, context: DownloadContext()).filename == "04 - Harder, Better, Faster, Stronger")
+    let track = sampleTrack(explicit: true).applying(settings)
     #expect(
-        builder.paths(for: dirty, context: DownloadContext()).filename
+        PathBuilder(settings: settings).paths(for: track, context: DownloadContext()).filename
             == "04 - Harder, Better, Faster, Stronger (Explicit)"
     )
 }

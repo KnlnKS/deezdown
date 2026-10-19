@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Track: Sendable, Equatable, Identifiable {
+public struct Track: Sendable, Equatable {
     public var id: String
     public var title: String
     public var duration: Int
@@ -64,15 +64,14 @@ public struct Track: Sendable, Equatable, Identifiable {
         bpm = gateway["BPM"].doubleValue ?? 0
         gain = gateway["GAIN"].doubleValue
         rank = gateway["RANK_SNG"].intValue ?? 0
-        explicit = (gateway["EXPLICIT_TRACK_CONTENT"]["EXPLICIT_LYRICS_STATUS"].intValue
-            ?? gateway["EXPLICIT_LYRICS"].intValue ?? 0) == 1
+        explicit = gateway.isExplicit("EXPLICIT_TRACK_CONTENT", else: "EXPLICIT_LYRICS")
         copyright = gateway["COPYRIGHT"].stringValue ?? ""
         date = CustomDate(deezerString: gateway["PHYSICAL_RELEASE_DATE"].stringValue)
             ?? CustomDate(deezerString: gateway["DIGITAL_RELEASE_DATE"].stringValue)
 
         mainArtist = main
         artistRefs = refs.isEmpty ? [main] : refs
-        artists = Album.orderedNames(from: refs.isEmpty ? [main] : refs)
+        artists = Album.orderedNames(from: artistRefs)
         contributors = gateway["SNG_CONTRIBUTORS"].objectValue.mapValues { value in
             value.arrayValue.compactMap(\.stringValue)
         }
@@ -87,7 +86,7 @@ public struct Track: Sendable, Equatable, Identifiable {
 
         var sizes: [Int: Int] = [:]
         for format in TrackFormat.allCases {
-            if let value = gateway[format.filesizeKey].intValue, value > 0 { sizes[format.rawValue] = value }
+            if let value = gateway["FILESIZE_\(format.apiName)"].intValue, value > 0 { sizes[format.rawValue] = value }
         }
         filesizes = sizes
 

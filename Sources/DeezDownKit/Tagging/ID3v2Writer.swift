@@ -32,28 +32,24 @@ struct ID3v2Writer {
         )
     }
 
-    mutating func addUnsyncedLyrics(_ lyrics: String, language: String = "XXX") {
+    mutating func addUnsyncedLyrics(_ lyrics: String) {
         guard !lyrics.isEmpty else { return }
         append(
             "USLT",
-            [Self.unicodeEncoding] + Array(language.utf8.prefix(3)) + Self.unicode("")
+            [Self.unicodeEncoding] + Array("XXX".utf8) + Self.unicode("")
                 + Self.unicodeTerminator + Self.unicode(lyrics)
         )
     }
 
-    mutating func addSyncedLyrics(_ lines: [(text: String, milliseconds: Int)], language: String = "XXX") {
+    mutating func addSyncedLyrics(_ lines: [(text: String, milliseconds: Int)]) {
         guard !lines.isEmpty else { return }
         var payload: [UInt8] = [Self.unicodeEncoding]
-        payload += Array(language.utf8.prefix(3))
+        payload += Array("XXX".utf8)
         payload += [0x02, 0x01]
         payload += Self.unicode("") + Self.unicodeTerminator
         for line in lines {
             payload += Self.unicode(line.text) + Self.unicodeTerminator
-            let stamp = UInt32(max(0, line.milliseconds))
-            payload += [
-                UInt8(truncatingIfNeeded: stamp >> 24), UInt8(truncatingIfNeeded: stamp >> 16),
-                UInt8(truncatingIfNeeded: stamp >> 8), UInt8(truncatingIfNeeded: stamp),
-            ]
+            payload += [UInt8](bigEndian: max(0, line.milliseconds))
         }
         append("SYLT", payload)
     }
@@ -70,20 +66,10 @@ struct ID3v2Writer {
 
     /// The front cover, described as deemix describes it.
     mutating func addPicture(_ image: Data, useUnicode: Bool) {
-        let mimeType = ImageDimensions.mimeType(of: image)
-        let description = "cover"
-        var payload: [UInt8] = []
-        if useUnicode {
-            payload.append(Self.unicodeEncoding)
-            payload += Array(mimeType.utf8) + [0x00]
-            payload.append(0x03)
-            payload += Self.unicode(description) + Self.unicodeTerminator
-        } else {
-            payload.append(Self.latinEncoding)
-            payload += Array(mimeType.utf8) + [0x00]
-            payload.append(0x03)
-            payload += Array(description.utf8) + [0x00]
-        }
+        var payload = [useUnicode ? Self.unicodeEncoding : Self.latinEncoding]
+        payload += Array(ImageDimensions.mimeType(of: image).utf8) + [0x00]
+        payload.append(0x03)
+        payload += useUnicode ? Self.unicode("cover") + Self.unicodeTerminator : Array("cover".utf8) + [0x00]
         payload += image
         append("APIC", payload)
     }
@@ -95,11 +81,7 @@ struct ID3v2Writer {
 
     private mutating func append(_ identifier: String, _ payload: [UInt8]) {
         frames += Array(identifier.utf8)
-        let size = UInt32(payload.count)
-        frames += [
-            UInt8(truncatingIfNeeded: size >> 24), UInt8(truncatingIfNeeded: size >> 16),
-            UInt8(truncatingIfNeeded: size >> 8), UInt8(truncatingIfNeeded: size),
-        ]
+        frames += [UInt8](bigEndian: payload.count)
         frames += [0x00, 0x00]
         frames += payload
     }

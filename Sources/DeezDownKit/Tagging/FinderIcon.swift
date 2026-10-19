@@ -11,7 +11,7 @@ enum FinderIcon {
 
     @MainActor
     static func apply(_ artwork: Data, to url: URL) {
-        guard !artwork.isEmpty, let image = NSImage(data: artwork) else { return }
+        guard let image = NSImage(data: artwork) else { return }
         NSWorkspace.shared.setIcon(image, forFile: url.path(percentEncoded: false), options: [])
     }
 }

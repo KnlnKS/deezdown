@@ -43,38 +43,20 @@ enum FLACTagWriter {
         for (index, block) in blocks.enumerated() {
             let isLast = index == blocks.count - 1
             header.append(block.0 | (isLast ? 0x80 : 0x00))
-            let length = block.1.count
-            header.append(contentsOf: [
-                UInt8(truncatingIfNeeded: length >> 16), UInt8(truncatingIfNeeded: length >> 8),
-                UInt8(truncatingIfNeeded: length),
-            ])
+            header.append(contentsOf: [UInt8](bigEndian: block.1.count, count: 3))
             header.append(block.1)
         }
 
         try TagRewriter.rewrite(url, reading: handle, header: header, audioFrom: audioOffset)
     }
 
-    private static func littleEndian(_ value: Int) -> [UInt8] {
-        [
-            UInt8(truncatingIfNeeded: value), UInt8(truncatingIfNeeded: value >> 8),
-            UInt8(truncatingIfNeeded: value >> 16), UInt8(truncatingIfNeeded: value >> 24),
-        ]
-    }
-
-    private static func bigEndian(_ value: Int) -> [UInt8] {
-        [
-            UInt8(truncatingIfNeeded: value >> 24), UInt8(truncatingIfNeeded: value >> 16),
-            UInt8(truncatingIfNeeded: value >> 8), UInt8(truncatingIfNeeded: value),
-        ]
-    }
-
     static func vorbisCommentBlock(_ comments: [(String, String)]) -> Data {
         let vendor = Array("deezdown".utf8)
-        var bytes = littleEndian(vendor.count) + vendor
-        bytes += littleEndian(comments.count)
+        var bytes = [UInt8](littleEndian: vendor.count) + vendor
+        bytes += [UInt8](littleEndian: comments.count)
         for (field, value) in comments {
             let entry = Array("\(field)=\(value)".utf8)
-            bytes += littleEndian(entry.count) + entry
+            bytes += [UInt8](littleEndian: entry.count) + entry
         }
         return Data(bytes)
     }
@@ -84,14 +66,14 @@ enum FLACTagWriter {
         let dimensions = ImageDimensions.read(picture) ?? (0, 0, 24)
         let mime = Array(ImageDimensions.mimeType(of: picture).utf8)
         let description = Array("cover".utf8)
-        var bytes = bigEndian(3)
-        bytes += bigEndian(mime.count) + mime
-        bytes += bigEndian(description.count) + description
-        bytes += bigEndian(dimensions.width)
-        bytes += bigEndian(dimensions.height)
-        bytes += bigEndian(dimensions.depth)
-        bytes += bigEndian(0)
-        bytes += bigEndian(picture.count)
+        var bytes = [UInt8](bigEndian: 3)
+        bytes += [UInt8](bigEndian: mime.count) + mime
+        bytes += [UInt8](bigEndian: description.count) + description
+        bytes += [UInt8](bigEndian: dimensions.width)
+        bytes += [UInt8](bigEndian: dimensions.height)
+        bytes += [UInt8](bigEndian: dimensions.depth)
+        bytes += [UInt8](bigEndian: 0)
+        bytes += [UInt8](bigEndian: picture.count)
         return Data(bytes) + picture
     }
 }
