@@ -8,10 +8,11 @@ public enum StripeCrypto {
 
     static let secret = Array("g4el58wc0zvf9na1".utf8)
     static let iv: [UInt8] = [0, 1, 2, 3, 4, 5, 6, 7]
+    static let hexDigits = Array("0123456789abcdef".utf8)
 
     public static func blowfishKey(trackID: String) -> [UInt8] {
         let digest = Insecure.MD5.hash(data: Data(trackID.utf8))
-        let hex = Hex.encodeBytes(digest)
+        let hex = digest.flatMap { [hexDigits[Int($0 >> 4)], hexDigits[Int($0 & 0x0F)]] }
         return (0..<16).map { hex[$0] ^ hex[$0 + 16] ^ secret[$0] }
     }
 }

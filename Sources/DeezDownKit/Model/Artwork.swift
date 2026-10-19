@@ -40,7 +40,6 @@ public struct Artwork: Sendable, Codable, Equatable, Hashable {
         return URL(string: "\(Artwork.host)/images/\(kind.rawValue)/\(md5)/\(size)x\(size)\(suffix)")
     }
 
-    /// Deezer degrades above 1200px and answers larger requests with an error.
-    public static let maximumSize = 1200
-    public static func clamped(_ size: Int) -> Int { min(size, maximumSize) }
+    /// The CDN serves covers up to 1800px; above 1200px some fail, and those fall back to 1200.
+    public static let maximumSize = 1800
 }

@@ -25,7 +25,6 @@ struct SettingsScreen: View {
         }
         .frame(width: 560, height: 460)
         .tint(.brand)
-        .onChange(of: model.settings) { _, _ in model.saveSettings() }
     }
 }
 
@@ -40,7 +39,6 @@ private struct SettingsForm<Content: View>: View {
 }
 
 private struct GeneralSettings: View {
-    @Environment(AppModel.self) private var model
     @Binding var settings: DownloadSettings
 
     var body: some View {
@@ -80,10 +78,22 @@ private struct GeneralSettings: View {
             Section("Extras") {
                 Toggle("Write an .m3u8 playlist file", isOn: $settings.createM3U8File)
                 if settings.createM3U8File {
-                    TextField("Playlist filename", text: $settings.playlistFilenameTemplate)
+                    TemplateField(
+                        "Playlist filename", text: $settings.playlistFilenameTemplate,
+                        tokens: PathBuilder.collectionTokens
+                    )
                 }
                 Toggle("Write .lrc synced lyrics files", isOn: $settings.syncedLyrics)
                 Toggle("Log failures to errors.txt", isOn: $settings.logErrors)
+                Toggle("Log tracks found by search to searched.txt", isOn: $settings.logSearched)
+            }
+
+            Section {
+                TextField("Run after each download", text: $settings.executeCommand, prompt: Text("Shell command"))
+                    .font(.system(.callout, design: .monospaced))
+            } footer: {
+                Text("%folder% and %filename% are replaced with the download's folder and, for a single track, its file.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -106,23 +116,23 @@ private struct NamingSettings: View {
     var body: some View {
         SettingsForm {
             Section("Filenames") {
-                TemplateField("Single track", text: $settings.tracknameTemplate, tokens: TemplateEngine.trackVariables)
-                TemplateField("Album track", text: $settings.albumTracknameTemplate, tokens: TemplateEngine.trackVariables)
-                TemplateField("Playlist track", text: $settings.playlistTracknameTemplate, tokens: TemplateEngine.trackVariables)
+                TemplateField("Single track", text: $settings.tracknameTemplate, tokens: PathBuilder.trackTokens)
+                TemplateField("Album track", text: $settings.albumTracknameTemplate, tokens: PathBuilder.trackTokens)
+                TemplateField("Playlist track", text: $settings.playlistTracknameTemplate, tokens: PathBuilder.trackTokens)
             }
 
             Section("Folders") {
                 Toggle("Artist folder", isOn: $settings.createArtistFolder)
                 if settings.createArtistFolder {
-                    TemplateField("Artist folder name", text: $settings.artistNameTemplate, tokens: TemplateEngine.artistVariables)
+                    TemplateField("Artist folder name", text: $settings.artistNameTemplate, tokens: PathBuilder.artistTokens)
                 }
                 Toggle("Album folder", isOn: $settings.createAlbumFolder)
                 if settings.createAlbumFolder {
-                    TemplateField("Album folder name", text: $settings.albumNameTemplate, tokens: TemplateEngine.albumVariables)
+                    TemplateField("Album folder name", text: $settings.albumNameTemplate, tokens: PathBuilder.albumTokens)
                 }
                 Toggle("Playlist folder", isOn: $settings.createPlaylistFolder)
                 if settings.createPlaylistFolder {
-                    TemplateField("Playlist folder name", text: $settings.playlistNameTemplate, tokens: TemplateEngine.playlistVariables)
+                    TemplateField("Playlist folder name", text: $settings.playlistNameTemplate, tokens: PathBuilder.playlistTokens)
                 }
                 Toggle("CD folder for multi-disc albums", isOn: $settings.createCDFolder)
                 Toggle("Folder for single tracks too", isOn: $settings.createSingleFolder)
@@ -136,6 +146,7 @@ private struct NamingSettings: View {
                         settings.paddingSize == 0 ? "Width: automatic" : "Width: \(settings.paddingSize)",
                         value: $settings.paddingSize, in: 0...8
                     )
+                    Toggle("Pad single digits to two", isOn: $settings.padSingleDigit)
                 }
                 TextField("Replace illegal characters with", text: $settings.illegalCharacterReplacer)
             }
@@ -194,7 +205,7 @@ private struct ArtworkSettings: View {
             Section("Saved alongside the music") {
                 Toggle("Save album cover", isOn: $settings.saveArtwork)
                 if settings.saveArtwork {
-                    TextField("Cover filename", text: $settings.coverImageTemplate)
+                    TemplateField("Cover filename", text: $settings.coverImageTemplate, tokens: PathBuilder.albumTokens)
                     Picker("Format", selection: $settings.localArtworkFormat) {
                         Text("JPEG").tag("jpg")
                         Text("PNG").tag("png")
@@ -203,7 +214,10 @@ private struct ArtworkSettings: View {
                 }
                 Toggle("Save artist image", isOn: $settings.saveArtworkArtist)
                 if settings.saveArtworkArtist {
-                    TextField("Artist image filename", text: $settings.artistImageTemplate)
+                    TemplateField(
+                        "Artist image filename", text: $settings.artistImageTemplate,
+                        tokens: PathBuilder.artistTokens
+                    )
                 }
                 Stepper(
                     "Size: \(settings.localArtworkSize) px", value: $settings.localArtworkSize,
@@ -218,12 +232,8 @@ private struct ArtworkSettings: View {
             Section {
                 Toggle("Show cover art on files in Finder", isOn: $settings.finderArtwork)
             } footer: {
-                Text(
-                    """
-                    Finder reads embedded art from MP3 but not from FLAC, so the cover is                     attached as the file's icon instead.
-                    """
-                )
-                .font(.caption).foregroundStyle(.secondary)
+                Text("Finder reads embedded art from MP3 but not from FLAC, so the cover is attached as the file's icon instead.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -271,6 +281,7 @@ private struct TagsSettings: View {
                 }
                 Toggle("Write the ARTISTS tag as well", isOn: $settings.tags.artists)
                     .disabled(settings.tags.multiArtistSeparator == .standard)
+                Toggle("Separate MP3 multi-value tags with nulls", isOn: $settings.tags.useNullSeparator)
                 Toggle("Single album artist only", isOn: $settings.tags.singleAlbumArtist)
                 Toggle("Tag playlists as compilations", isOn: $settings.tags.savePlaylistAsCompilation)
             }
@@ -299,10 +310,14 @@ private struct MetadataSettings: View {
                 }
             }
 
-            Section("Dates") {
-                Picker("Date format", selection: $settings.dateFormat) {
-                    ForEach(DateFormat.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
+            Section {
+                TextField("Date format", text: $settings.dateFormat)
+                    .font(.system(.callout, design: .monospaced))
+            } header: {
+                Text("Dates")
+            } footer: {
+                Text("Y, M and D stand for the year, month and day, as in Y-M-D or D/M/Y.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section {

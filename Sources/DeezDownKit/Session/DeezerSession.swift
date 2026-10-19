@@ -29,8 +29,6 @@ public actor DeezerSession {
         urlSession = URLSession(configuration: configuration)
     }
 
-    public var isLoggedIn: Bool { user != nil }
-
     @discardableResult
     public func login(arl candidate: String) async throws -> DeezerUser {
         let trimmed = candidate.filter { !$0.isWhitespace }
@@ -100,11 +98,7 @@ public actor DeezerSession {
     // MARK: - Gateway
 
     @discardableResult
-    public func gateway(
-        _ method: String,
-        _ arguments: [String: JSONValue] = [:],
-        parameters: [String: String] = [:]
-    ) async throws -> JSONValue {
+    public func gateway(_ method: String, _ arguments: [String: JSONValue] = [:]) async throws -> JSONValue {
         var arguments = arguments
         var attempt = 0
 
@@ -112,13 +106,12 @@ public actor DeezerSession {
             attempt += 1
             let token = method == "deezer.getUserData" ? "null" : try await resolvedAPIToken()
             var components = URLComponents(url: Self.gatewayURL, resolvingAgainstBaseURL: false)!
-            components.queryItems =
-                [
-                    URLQueryItem(name: "method", value: method),
-                    URLQueryItem(name: "input", value: "3"),
-                    URLQueryItem(name: "api_version", value: "1.0"),
-                    URLQueryItem(name: "api_token", value: token),
-                ] + parameters.map { URLQueryItem(name: $0.key, value: $0.value) }
+            components.queryItems = [
+                URLQueryItem(name: "method", value: method),
+                URLQueryItem(name: "input", value: "3"),
+                URLQueryItem(name: "api_version", value: "1.0"),
+                URLQueryItem(name: "api_token", value: token),
+            ]
 
             var request = URLRequest(url: components.url!)
             request.httpMethod = "POST"
@@ -267,9 +260,4 @@ public actor DeezerSession {
 public enum MediaResult: Sendable, Equatable {
     case success(primary: URL, mirrors: [URL])
     case failure(code: Int, message: String)
-
-    public var urls: [URL] {
-        if case .success(let primary, let mirrors) = self { return [primary] + mirrors }
-        return []
-    }
 }

@@ -158,11 +158,13 @@ public enum ProfileTab: String, Sendable, CaseIterable {
 }
 
 extension DeezerSession {
-    /// Genres, UPC and record type only exist on the public API; one call covers a whole album.
-    public func enrichedAlbum(id: String) async throws -> Album {
+    /// Genres, UPC and record type only exist on the public API; one call covers a whole album,
+    /// and none when the caller already has the album's public entry.
+    public func enrichedAlbum(id: String, publicData known: JSONValue? = nil) async throws -> Album {
+        async let publicTask = known == nil ? publicAPI("album/\(id)") : .null
         let gateway = try await albumData(id: id)
-        let publicData = try? await publicAPI("album/\(id)")
-        return Album(gateway: gateway, publicData: publicData ?? .null)
+        let fetched = try? await publicTask
+        return Album(gateway: gateway, publicData: known ?? fetched ?? .null)
     }
 
     /// BPM is per-track on the public API only, exactly as deemix fetches it.

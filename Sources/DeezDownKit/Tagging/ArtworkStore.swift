@@ -1,9 +1,10 @@
 import Foundation
 
-/// Fetches cover art once per album/size and hands the same bytes to every track in the batch.
+/// Fetches each picture once and hands the same bytes to every track that asks while it is fresh.
 public actor ArtworkStore {
     private let urlSession: URLSession
     private var cache: [URL: Data] = [:]
+    private var cachedOrder: [URL] = []
     private var inFlight: [URL: Task<Data?, Never>] = [:]
 
     public init() {
@@ -21,15 +22,23 @@ public actor ArtworkStore {
 
         let task = Task<Data?, Never> { [urlSession] in
             if let data = await Self.fetch(url, using: urlSession) { return data }
-            // Deezer degrades above 1200px and answers larger requests with an error.
+            // Not every cover exists above 1200px.
             guard size > 1200, let fallback = picture.url(size: 1200, format: format) else { return nil }
             return await Self.fetch(fallback, using: urlSession)
         }
         inFlight[url] = task
         let data = await task.value
         inFlight[url] = nil
-        if let data, !data.isEmpty { cache[url] = data }
+        if let data, !data.isEmpty { remember(data, for: url) }
         return data
+    }
+
+    /// One album's tracks finish close together, so a short memory serves them all without
+    /// holding every cover of a long playlist.
+    private func remember(_ data: Data, for url: URL) {
+        guard cache.updateValue(data, forKey: url) == nil else { return }
+        cachedOrder.append(url)
+        if cachedOrder.count > 32 { cache[cachedOrder.removeFirst()] = nil }
     }
 
     private static func fetch(_ url: URL, using session: URLSession) async -> Data? {
@@ -37,9 +46,5 @@ public actor ArtworkStore {
             let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode), !data.isEmpty
         else { return nil }
         return data
-    }
-
-    public func clear() {
-        cache.removeAll()
     }
 }

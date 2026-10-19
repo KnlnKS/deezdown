@@ -7,6 +7,10 @@ enum ImageDimensions {
         return nil
     }
 
+    static func mimeType(of image: Data) -> String {
+        image.starts(with: [0x89, 0x50, 0x4E, 0x47]) ? "image/png" : "image/jpeg"
+    }
+
     private static func png(_ data: Data) -> (Int, Int, Int)? {
         guard data.count >= 26 else { return nil }
         let bytes = [UInt8](data.prefix(26))

@@ -34,6 +34,17 @@ public struct ArtistRef: Sendable, Codable, Equatable, Hashable, Identifiable {
         role = ArtistRole(roleID: gateway["ROLE_ID"].intValue)
     }
 
+    /// The public API names an artist's picture only inside its image URLs.
+    init?(publicData: JSONValue) {
+        guard let id = publicData["id"].stringValue, let name = publicData["name"].stringValue else { return nil }
+        let md5 = (publicData["picture_small"].stringValue ?? "").components(separatedBy: "/artist/").dropFirst().first?
+            .prefix { $0 != "/" }
+        self.init(
+            id: id, name: name, picture: Artwork(md5: md5.map(String.init) ?? "", kind: .artist),
+            role: ArtistRole(rawValue: publicData["role"].stringValue ?? "") ?? .main
+        )
+    }
+
     public static let variousArtistsID = "5080"
     public var isVariousArtists: Bool { id == Self.variousArtistsID }
 }

@@ -6,15 +6,16 @@ public enum NameSanitizer {
 
     /// Deezer titles routinely contain characters HFS+/APFS or Finder will not accept.
     public static func fixName(_ name: String, replacer: String) -> String {
-        String(name.map { illegal.contains($0) ? Character(replacer.first.map(String.init) ?? "_") : $0 })
-            .precomposedStringWithCanonicalMapping
+        var output = ""
+        for character in name {
+            if illegal.contains(character) { output += replacer } else { output.append(character) }
+        }
+        return output.precomposedStringWithCanonicalMapping
     }
 
     /// Path components have a hard byte limit; truncate rather than fail at write time.
     public static func fixLongName(_ name: String) -> String {
-        name.split(separator: "/", omittingEmptySubsequences: false)
-            .map { String($0.prefix(segmentLimit)) }
-            .joined(separator: "/")
+        String(name.prefix(segmentLimit))
     }
 
     /// A component that is only dots or spaces is invisible to Finder and breaks path joins.

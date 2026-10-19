@@ -1,6 +1,6 @@
 import Foundation
 
-public struct DeezerUser: Sendable, Codable, Equatable, Identifiable {
+public struct DeezerUser: Sendable, Equatable, Identifiable {
     public var id: String
     public var name: String
     public var pictureMD5: String
@@ -10,13 +10,17 @@ public struct DeezerUser: Sendable, Codable, Equatable, Identifiable {
     public var country: String
     public var language: String
     public var lovedTracksID: String
-    public var offerName: String?
 
     public var highestAvailableFormat: TrackFormat {
         if canStreamLossless { return .flac }
         if canStreamHQ { return .mp3_320 }
         return .mp3_128
     }
+
+    public var plan: String { canStreamLossless ? "Lossless" : canStreamHQ ? "High Quality" : "Standard" }
+
+    /// Favorite tracks are this playlist, so it queues them all as one entry.
+    public var lovedTracks: DeezerLink? { lovedTracksID.isEmpty ? nil : .playlist(lovedTracksID) }
 
     public func canStream(_ format: TrackFormat) -> Bool {
         if format.requiresLossless { return canStreamLossless }
@@ -37,6 +41,5 @@ public struct DeezerUser: Sendable, Codable, Equatable, Identifiable {
         country = options["license_country"].stringValue ?? results["COUNTRY"].stringValue ?? ""
         language = user["SETTING"]["global"]["language"].stringValue ?? "en"
         lovedTracksID = user["LOVEDTRACKS_ID"].stringValue ?? ""
-        offerName = user["OFFER_NAME"].stringValue
     }
 }

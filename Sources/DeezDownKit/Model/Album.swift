@@ -1,6 +1,6 @@
 import Foundation
 
-public enum RecordType: String, Sendable, Codable, CaseIterable {
+public enum RecordType: String, Sendable, CaseIterable {
     case single, album, compile, ep, bundle
 
     init(gatewayType: String?, publicType: String?) {
@@ -34,12 +34,10 @@ public enum RecordType: String, Sendable, Codable, CaseIterable {
     }
 }
 
-public struct Album: Sendable, Codable, Equatable, Identifiable {
+public struct Album: Sendable, Equatable, Identifiable {
     public var id: String
     public var title: String
-    public var version: String
     public var mainArtist: ArtistRef
-    public var artistRefs: [ArtistRef]
     public var artists: [String]
     public var cover: Artwork
     public var genres: [String]
@@ -51,14 +49,10 @@ public struct Album: Sendable, Codable, Equatable, Identifiable {
     public var trackTotal: Int
     public var discTotal: Int
     public var explicit: Bool
-    public var rootArtist: ArtistRef?
     public var isPlaylistCompilation = false
 
-    public var artistsString = ""
-    public var dateString = ""
-
     public init(
-        id: String, title: String, version: String = "", mainArtist: ArtistRef, artistRefs: [ArtistRef] = [],
+        id: String, title: String, mainArtist: ArtistRef,
         artists: [String] = [], cover: Artwork = Artwork(md5: "", kind: .cover), genres: [String] = [],
         label: String = "Unknown", barcode: String = "Unknown", copyright: String = "",
         recordType: RecordType = .album, date: CustomDate? = nil, trackTotal: Int = 0, discTotal: Int = 1,
@@ -66,9 +60,7 @@ public struct Album: Sendable, Codable, Equatable, Identifiable {
     ) {
         self.id = id
         self.title = title
-        self.version = version
         self.mainArtist = mainArtist
-        self.artistRefs = artistRefs.isEmpty ? [mainArtist] : artistRefs
         self.artists = artists.isEmpty ? [mainArtist.name] : artists
         self.cover = cover
         self.genres = genres
@@ -83,15 +75,19 @@ public struct Album: Sendable, Codable, Equatable, Identifiable {
     }
 
     init(gateway: JSONValue, publicData: JSONValue = .null) {
-        let refs = gateway["ARTISTS"].arrayValue.map(ArtistRef.init(gateway:))
-        let main = refs.first { $0.role == .main } ?? refs.first ?? ArtistRef(gateway: gateway)
+        // As in deemix, the album's artists come from the public API: the gateway's album data
+        // names its main artist without a picture and lists no others.
+        let contributors = publicData["contributors"].arrayValue.compactMap(ArtistRef.init(publicData:))
+        let refs = contributors.isEmpty ? gateway["ARTISTS"].arrayValue.map(ArtistRef.init(gateway:)) : contributors
+        let main =
+            ArtistRef(publicData: publicData["artist"])
+            ?? refs.first { $0.role == .main } ?? refs.first ?? ArtistRef(gateway: gateway)
 
         id = gateway["ALB_ID"].stringValue ?? publicData["id"].stringValue ?? "0"
-        title = gateway["ALB_TITLE"].stringValue ?? publicData["title"].stringValue ?? ""
-        version = gateway["VERSION"].stringValue ?? ""
+        title = gateway["ALB_TITLE"].stringValue.map { $0.withVersion(gateway["VERSION"].stringValue) }
+            ?? publicData["title"].stringValue ?? ""
         mainArtist = main
-        artistRefs = refs.isEmpty ? [main] : refs
-        artists = Album.orderedNames(from: artistRefs)
+        artists = Album.orderedNames(from: refs.isEmpty ? [main] : refs)
         cover = Artwork(
             md5: gateway["ALB_PICTURE"].stringValue ?? publicData["md5_image"].stringValue ?? "",
             kind: .cover
@@ -125,13 +121,11 @@ public struct Album: Sendable, Codable, Equatable, Identifiable {
         isPlaylistCompilation = true
         id = "pl_\(playlist.id)"
         title = playlist.title
-        mainArtist = ArtistRef(id: "0", name: "Various Artists", role: .main)
-        artistRefs = [mainArtist]
+        mainArtist = ArtistRef(id: ArtistRef.variousArtistsID, name: "Various Artists", role: .main)
         artists = [mainArtist.name]
         cover = playlist.picture
-        genres = ["Compile"]
-        label = "Deezer Playlist"
-        barcode = "Unknown"
+        label = ""
+        barcode = ""
         recordType = .compile
         date = playlist.date
         trackTotal = playlist.trackCount

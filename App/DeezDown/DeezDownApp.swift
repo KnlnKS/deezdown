@@ -69,14 +69,14 @@ struct DownloadCommands: Commands {
                 for item in model.queue where item.canRetry { model.retry(item.id) }
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
-            .disabled(!model.queue.contains(where: \.canRetry))
+            .disabled(!model.summary.canRetry)
 
             Button("Clear Finished") { model.clearFinished() }
                 .keyboardShortcut(.delete, modifiers: [.command, .shift])
-                .disabled(!model.queue.contains { [.completed, .canceled].contains($0.status) })
+                .disabled(!model.summary.canClear)
 
             Button("Cancel All") { model.cancelAll() }
-                .disabled(model.activeDownloads == 0)
+                .disabled(model.summary.active == 0)
 
             Divider()
 
@@ -89,9 +89,7 @@ struct DownloadCommands: Commands {
         Binding(
             get: { model.settings.maxBitrate == format },
             set: { isOn in
-                guard isOn else { return }
-                model.settings.maxBitrate = format
-                model.saveSettings()
+                if isOn { model.settings.maxBitrate = format }
             }
         )
     }

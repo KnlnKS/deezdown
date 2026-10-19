@@ -38,17 +38,24 @@ struct DownloadsScreen: View {
                 .help("Open the downloads folder")
             }
             ToolbarItem {
+                Button { model.resumeAll() } label: {
+                    Label("Resume All", systemImage: "play.circle")
+                }
+                .disabled(model.summary.paused == 0)
+                .help("Resume every paused download")
+            }
+            ToolbarItem {
                 Button { model.clearFinished() } label: {
                     Label("Clear Finished", systemImage: "checklist.checked")
                 }
-                .disabled(!model.queue.contains { [.completed, .canceled].contains($0.status) })
+                .disabled(!model.summary.canClear)
                 .help("Clear finished downloads")
             }
             ToolbarItem {
                 Button { model.cancelAll() } label: {
                     Label("Cancel All", systemImage: "xmark.circle")
                 }
-                .disabled(model.activeDownloads == 0)
+                .disabled(model.summary.active == 0)
                 .help("Cancel everything in the queue")
             }
         }
@@ -56,11 +63,10 @@ struct DownloadsScreen: View {
     }
 
     private var subtitle: String {
-        let paused = model.queue.filter { $0.status == .paused }.count
-        if paused > 0, model.activeDownloads == paused { return "\(paused) paused" }
-        let active = model.activeDownloads - paused
-        if active > 0 { return "\(active) in progress" }
-        let tracks = model.queue.reduce(0) { $0 + $1.completedTracks }
+        let summary = model.summary
+        if summary.paused > 0, summary.active == summary.paused { return "\(summary.paused) paused" }
+        if summary.active > summary.paused { return "\(summary.active - summary.paused) in progress" }
+        let tracks = summary.downloadedTracks
         guard tracks > 0 else { return "" }
         return "\(tracks) track\(tracks == 1 ? "" : "s") downloaded"
     }
@@ -150,23 +156,11 @@ private struct DownloadRow: View {
     private var actions: some View {
         HStack(spacing: 10) {
             if item.canPause {
-                Button { model.pause(item.id) } label: { Image(systemName: "pause.fill") }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .help("Pause")
-                    .accessibilityLabel("Pause \(item.title)")
+                rowButton("Pause", symbol: "pause.fill") { model.pause(item.id) }
             } else if item.canResume {
-                Button { model.resume(item.id) } label: { Image(systemName: "play.fill") }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.brand)
-                    .help("Resume")
-                    .accessibilityLabel("Resume \(item.title)")
+                rowButton("Resume", symbol: "play.fill", style: .brand) { model.resume(item.id) }
             } else if item.canRetry {
-                Button { model.retry(item.id) } label: { Image(systemName: "arrow.clockwise") }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .help("Retry")
-                    .accessibilityLabel("Retry \(item.title)")
+                rowButton("Retry", symbol: "arrow.clockwise") { model.retry(item.id) }
             }
 
             // One slot: the outcome badge swaps to a remove button under the pointer,
@@ -177,22 +171,27 @@ private struct DownloadRow: View {
                         .foregroundStyle(tint)
                         .opacity(hovering ? 0 : 1)
                         .accessibilityHidden(true)
-                    Button { model.remove(item.id) } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(.secondary)
-                        .opacity(hovering ? 1 : 0)
-                        .help("Remove from the list")
-                        .accessibilityLabel("Remove \(item.title)")
+                    rowButton("Remove", symbol: "xmark.circle.fill", help: "Remove from the list") {
+                        model.remove(item.id)
+                    }
+                    .opacity(hovering ? 1 : 0)
                 } else {
-                    Button { model.cancel(item.id) } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(.secondary)
-                        .help("Cancel")
-                        .accessibilityLabel("Cancel \(item.title)")
+                    rowButton("Cancel", symbol: "xmark.circle.fill") { model.cancel(item.id) }
                 }
             }
             .frame(width: 18)
         }
+    }
+
+    private func rowButton(
+        _ verb: String, symbol: String, help: String? = nil, style: some ShapeStyle = HierarchicalShapeStyle.secondary,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) { Image(systemName: symbol) }
+            .buttonStyle(.borderless)
+            .foregroundStyle(style)
+            .help(help ?? verb)
+            .accessibilityLabel("\(verb) \(item.title)")
     }
 
     private var symbol: String {

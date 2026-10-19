@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CustomDate: Sendable, Codable, Equatable, Hashable {
+public struct CustomDate: Sendable, Equatable, Hashable {
     public var day: String
     public var month: String
     public var year: String
@@ -37,21 +37,24 @@ public struct CustomDate: Sendable, Codable, Equatable, Hashable {
         }
     }
 
+    /// As in deemix, each run of D, M or Y stands for the day, month or year.
     public func formatted(_ template: String) -> String {
         var output = ""
-        var index = template.startIndex
-        while index < template.endIndex {
-            let character = template[index]
-            switch character {
-            case "D", "d": output += day
-            case "M", "m": output += month
-            case "Y", "y": output += year
-            default: output.append(character)
+        var previous: Character?
+        for character in template {
+            let value: String? =
+                switch character {
+                case "D": day
+                case "M": month
+                case "Y": year
+                default: nil
+                }
+            if let value {
+                if character != previous { output += value }
+            } else {
+                output.append(character)
             }
-            index = template.index(after: index)
-            while index < template.endIndex, template[index] == character {
-                index = template.index(after: index)
-            }
+            previous = character
         }
         return output
     }

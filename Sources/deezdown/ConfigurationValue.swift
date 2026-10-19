@@ -3,7 +3,7 @@ import DeezDownKit
 import Foundation
 
 struct ConfigurationValue {
-    private var root: [String: JSONValue]
+    private let root: [String: JSONValue]
 
     init(_ settings: DownloadSettings) throws {
         root = try JSONDecoder().decode([String: JSONValue].self, from: JSONEncoder().encode(settings))
@@ -21,43 +21,22 @@ struct ConfigurationValue {
         return String(decoding: try encoder.encode(value), as: UTF8.self)
     }
 
-    mutating func setting(_ key: String, to input: String) throws -> DownloadSettings {
-        let original = try lookup(key)
-        let replacement: JSONValue
-        switch original {
-        case .bool:
-            guard ["true", "false"].contains(input.lowercased()) else {
-                throw ValidationError("\(key) expects true or false.")
+    /// The text is read the way a stored config is, and repaired the way it would be saved.
+    func setting(_ key: String, to input: String) throws -> DownloadSettings {
+        let expected =
+            switch try lookup(key) {
+            case .bool: "true or false"
+            case .int: "an integer"
+            case .object: throw ValidationError("\(key) cannot be changed with this command.")
+            default: "one of its listed values"
             }
-            replacement = .bool(input.lowercased() == "true")
-        case .int:
-            guard let number = Int(input) else { throw ValidationError("\(key) expects an integer.") }
-            replacement = .int(number)
-        case .double:
-            guard let number = Double(input), number.isFinite else {
-                throw ValidationError("\(key) expects a number.")
-            }
-            replacement = .double(number)
-        case .string:
-            replacement = .string(input)
-        default:
-            throw ValidationError("\(key) cannot be changed with this command.")
-        }
-
-        let parts = key.split(separator: ".").map(String.init)
-        if parts.count == 1 {
-            root[parts[0]] = replacement
-        } else {
-            var nested = root[parts[0]]!.objectValue
-            nested[parts[1]] = replacement
-            root[parts[0]] = .object(nested)
-        }
-
-        do {
-            return try JSONDecoder().decode(DownloadSettings.self, from: JSONEncoder().encode(root))
-        } catch {
-            throw ValidationError("Invalid value for \(key): \(error.localizedDescription)")
-        }
+        let overlay = key.split(separator: ".").reversed().reduce(JSONValue.string(input)) { .object([String($1): $0]) }
+        guard
+            var settings = try? JSONDecoder().decode(
+                DownloadSettings.self, from: JSONEncoder().encode(JSONValue.object(root).merging(overlay)))
+        else { throw ValidationError("\(key) expects \(expected).") }
+        settings.repair()
+        return settings
     }
 
     private func lookup(_ key: String) throws -> JSONValue {

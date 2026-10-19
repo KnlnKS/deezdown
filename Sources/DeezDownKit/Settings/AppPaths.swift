@@ -24,9 +24,7 @@ public struct AppPaths: Sendable {
         self.configDirectory = configDirectory
     }
 
-    public func createDirectories() throws {
-        for directory in [configDirectory, queueDirectory] {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
+    public func createConfigDirectory() throws {
+        try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
     }
 }

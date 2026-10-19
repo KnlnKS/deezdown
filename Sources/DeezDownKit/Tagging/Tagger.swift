@@ -10,6 +10,7 @@ public enum Tagger {
         artwork: Data?,
         settings: DownloadSettings
     ) throws {
+        let artwork = settings.tags.cover && artwork?.isEmpty == false ? artwork : nil
         switch format.fileExtension {
         case "mp3": try tagMP3(track, at: url, artwork: artwork, settings: settings)
         case "flac": try tagFLAC(track, at: url, artwork: artwork, settings: settings)
@@ -22,20 +23,15 @@ public enum Tagger {
         String(format: "%.2f dB", (gain + 18.4) * -1)
     }
 
-    static func trackArtistTag(_ track: Track, _ tags: TagSettings) -> String {
-        switch tags.multiArtistSeparator {
-        case .standard: track.artists.joined(separator: "/")
-        case .mainOnly: track.mainArtist.name
-        default: track.artistsString
-        }
+    /// deemix's ID3 writer joins several values with "/" (";" for genres), or with nulls when asked.
+    static func joined(_ values: [String], _ tags: TagSettings, separator: String = "/") -> String {
+        values.joined(separator: tags.useNullSeparator ? "\0" : separator)
     }
 
-    static func albumArtistTag(_ track: Track, _ tags: TagSettings) -> String {
-        tags.singleAlbumArtist ? track.album.mainArtist.name : track.album.artists.joined(separator: ", ")
-    }
-
-    static func isCompilation(_ track: Track, _ tags: TagSettings) -> Bool {
-        (tags.savePlaylistAsCompilation && track.playlist != nil) || track.album.recordType == .compile
+    /// The main artist alone, unless that is Various Artists and those are being left out.
+    static func singleAlbumArtist(_ track: Track, _ settings: DownloadSettings) -> Bool {
+        settings.tags.singleAlbumArtist
+            && (!track.album.mainArtist.isVariousArtists || settings.albumVariousArtists)
     }
 
     // MARK: - MP3
@@ -45,12 +41,20 @@ public enum Tagger {
         var writer = ID3v2Writer()
 
         if tags.title { writer.addText("TIT2", track.title) }
-        if tags.artist { writer.addText("TPE1", trackArtistTag(track, tags)) }
+        if tags.artist {
+            writer.addText(
+                "TPE1", tags.multiArtistSeparator == .standard ? joined(track.artists, tags) : track.artistsString)
+        }
         if tags.artists, tags.multiArtistSeparator != .standard {
-            writer.addUserText("ARTISTS", track.artists.joined(separator: ", "))
+            writer.addUserText("ARTISTS", joined(track.artists, tags))
         }
         if tags.album { writer.addText("TALB", track.album.title) }
-        if tags.albumArtist { writer.addText("TPE2", albumArtistTag(track, tags)) }
+        if tags.albumArtist {
+            writer.addText(
+                "TPE2",
+                singleAlbumArtist(track, settings) ? track.album.mainArtist.name : joined(track.album.artists, tags)
+            )
+        }
         if tags.trackNumber {
             writer.addText(
                 "TRCK",
@@ -66,7 +70,7 @@ public enum Tagger {
             )
         }
         if tags.genre, !track.album.genres.isEmpty {
-            writer.addText("TCON", track.album.genres.joined(separator: ";"))
+            writer.addText("TCON", joined(track.album.genres, tags, separator: ";"))
         }
         if let date = track.date ?? track.album.date {
             if tags.year { writer.addText("TYER", date.year) }
@@ -86,7 +90,7 @@ public enum Tagger {
         if tags.lyrics, let unsynced = track.lyrics?.unsynced { writer.addUnsyncedLyrics(unsynced) }
         if tags.syncedLyrics, let lyrics = track.lyrics { writer.addSyncedLyrics(lyrics.id3Sync) }
         if tags.composer, let composers = track.contributors["composer"], !composers.isEmpty {
-            writer.addText("TCOM", composers.joined(separator: "/"))
+            writer.addText("TCOM", joined(composers, tags))
         }
         if tags.involvedPeople {
             var pairs: [(role: String, person: String)] = []
@@ -96,19 +100,15 @@ public enum Tagger {
             writer.addInvolvedPeople(pairs)
         }
         if tags.copyright, !track.copyright.isEmpty { writer.addText("TCOP", track.copyright) }
-        if isCompilation(track, tags) { writer.addText("TCMP", "1") }
+        if track.album.recordType == .compile { writer.addText("TCMP", "1") }
         if tags.source {
             writer.addUserText("SOURCE", "Deezer")
             writer.addUserText("SOURCEID", track.id)
         }
-        if tags.cover, let artwork, !artwork.isEmpty {
-            writer.addPicture(
-                artwork,
-                mimeType: ID3v2Writer.mimeType(for: artwork),
-                description: "cover",
-                useUnicode: tags.coverDescriptionUTF8
-            )
+        if tags.rating {
+            writer.addPopularimeter(rating: UInt8(min(255, (Double(track.rank) / 10000 * 2.55).rounded())))
         }
+        if let artwork { writer.addPicture(artwork, useUnicode: tags.coverDescriptionUTF8) }
 
         var trailer = Data()
         if tags.saveID3v1 {
@@ -162,10 +162,10 @@ public enum Tagger {
 
         if tags.title { add("TITLE", track.title) }
         if tags.artist {
-            switch tags.multiArtistSeparator {
-            case .standard: for artist in track.artists { add("ARTIST", artist) }
-            case .mainOnly: add("ARTIST", track.mainArtist.name)
-            default: add("ARTIST", track.artistsString)
+            if tags.multiArtistSeparator == .standard {
+                for artist in track.artists { add("ARTIST", artist) }
+            } else {
+                add("ARTIST", track.artistsString)
             }
         }
         if tags.artists, tags.multiArtistSeparator != .standard {
@@ -173,7 +173,7 @@ public enum Tagger {
         }
         if tags.album { add("ALBUM", track.album.title) }
         if tags.albumArtist {
-            if tags.singleAlbumArtist {
+            if singleAlbumArtist(track, settings) {
                 add("ALBUMARTIST", track.album.mainArtist.name)
             } else {
                 for artist in track.album.artists { add("ALBUMARTIST", artist) }
@@ -184,8 +184,8 @@ public enum Tagger {
         if tags.discNumber { add("DISCNUMBER", "\(track.discNumber)") }
         if tags.discTotal, track.album.discTotal > 0 { add("DISCTOTAL", "\(track.album.discTotal)") }
         if tags.genre { for genre in track.album.genres { add("GENRE", genre) } }
-        if tags.date, !track.dateString.isEmpty {
-            add("DATE", track.dateString)
+        if tags.date, let date = track.date?.formatted(settings.dateFormat), !date.isEmpty {
+            add("DATE", date)
         } else if tags.year, let year = (track.date ?? track.album.date)?.year {
             add("DATE", year)
         }
@@ -205,19 +205,13 @@ public enum Tagger {
         }
         if tags.composer { for composer in track.contributors["composer"] ?? [] { add("COMPOSER", composer) } }
         if tags.copyright, !track.copyright.isEmpty { add("COPYRIGHT", track.copyright) }
-        if isCompilation(track, tags) { add("COMPILATION", "1") }
+        if track.album.recordType == .compile { add("COMPILATION", "1") }
         if tags.source {
             add("SOURCE", "Deezer")
             add("SOURCEID", track.id)
         }
         if tags.rating { add("RATING", "\(Int((Double(track.rank) / 10000).rounded()))") }
 
-        let picture = (tags.cover ? artwork : nil).flatMap { data -> FLACTagWriter.EmbeddedImage? in
-            data.isEmpty
-                ? nil
-                : FLACTagWriter.EmbeddedImage(
-                    data: data, mimeType: ID3v2Writer.mimeType(for: data), description: "cover")
-        }
-        try FLACTagWriter.write(comments: comments, picture: picture, to: url)
+        try FLACTagWriter.write(comments: comments, picture: artwork, to: url)
     }
 }

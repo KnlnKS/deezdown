@@ -34,9 +34,9 @@ struct LiveEngine {
         settings.createM3U8File = true
         settings.queueConcurrency = 8
 
-        let engine = DownloadEngine(session: session, settings: settings, paths: appPaths)
+        let engine = DownloadEngine(session: session, settings: settings, queueDirectory: appPaths.queueDirectory)
         let started = ContinuousClock.now
-        try await engine.enqueue(.album("302127"))
+        try await engine.enqueue([.album("302127")])
         let finished = await drain(engine)
         let elapsed = ContinuousClock.now - started
 
@@ -72,8 +72,8 @@ struct LiveEngine {
         settings.downloadLocation = music.path(percentEncoded: false)
         settings.maxBitrate = .mp3_128
 
-        let engine = DownloadEngine(session: session, settings: settings, paths: appPaths)
-        try await engine.enqueue(.track("3135556"))
+        let engine = DownloadEngine(session: session, settings: settings, queueDirectory: appPaths.queueDirectory)
+        try await engine.enqueue([.track("3135556")])
         let finished = await drain(engine)
 
         #expect(finished.first?.status == .completed)
@@ -90,11 +90,11 @@ struct LiveEngine {
         var settings = DownloadSettings()
         settings.downloadLocation = music.path(percentEncoded: false)
 
-        let engine = DownloadEngine(session: session, settings: settings, paths: appPaths)
-        try await engine.enqueue(.album("302127"))
+        let engine = DownloadEngine(session: session, settings: settings, queueDirectory: appPaths.queueDirectory)
+        try await engine.enqueue([.album("302127")])
         await engine.cancelAll()
 
-        let restored = DownloadEngine(session: session, settings: settings, paths: appPaths)
+        let restored = DownloadEngine(session: session, settings: settings, queueDirectory: appPaths.queueDirectory)
         await restored.restore()
         let queue = await restored.queue
         #expect(queue.count == 1)

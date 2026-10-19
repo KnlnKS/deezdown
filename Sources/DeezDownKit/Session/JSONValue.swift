@@ -68,8 +68,8 @@ extension JSONValue {
     public var intValue: Int? {
         switch self {
         case .int(let value): value
-        case .double(let value): Int(value)
-        case .string(let value): Int(value) ?? Int(Double(value) ?? .nan)
+        case .double(let value): Int(exactly: value.rounded(.towardZero))
+        case .string(let value): Int(value) ?? Double(value).flatMap { Int(exactly: $0.rounded(.towardZero)) }
         case .bool(let value): value ? 1 : 0
         default: nil
         }
@@ -122,13 +122,26 @@ extension JSONValue: ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, Ex
 
 extension JSONValue {
     /// Overlays `other` on top of `self`, recursing into nested objects so a stored config
-    /// that predates a new setting keeps every value it does know about.
+    /// that predates a new setting keeps every value it does know about. A scalar takes the
+    /// type of the one it replaces where it converts cleanly, since deemix writes some
+    /// numbers as strings.
     public func merging(_ other: JSONValue) -> JSONValue {
-        guard case .object(let base) = self, case .object(let overlay) = other else { return other }
-        var merged = base
-        for (key, value) in overlay {
-            merged[key] = base[key].map { $0.merging(value) } ?? value
+        switch (self, other) {
+        case (.object(let base), .object(let overlay)):
+            .object(base.merging(overlay.map { key, value in (key, base[key]?.merging(value) ?? value) }) { $1 })
+        case (.int, .string(let text)): Int(text).map(JSONValue.int) ?? other
+        case (.double, .string(let text)): Double(text).map(JSONValue.double) ?? other
+        case (.double, .int(let number)): .double(Double(number))
+        case (.bool, .string(let text)) where ["true", "false"].contains(text.lowercased()):
+            .bool(text.lowercased() == "true")
+        case (.string, .int(let number)): .string(String(number))
+        default: other
         }
-        return .object(merged)
+    }
+
+    /// Each leaf of an object tree on its own, wrapped back in its path.
+    var leaves: [JSONValue] {
+        guard case .object(let fields) = self, !fields.isEmpty else { return [self] }
+        return fields.flatMap { key, value in value.leaves.map { .object([key: $0]) } }
     }
 }

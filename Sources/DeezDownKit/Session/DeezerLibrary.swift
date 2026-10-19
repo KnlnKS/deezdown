@@ -19,32 +19,11 @@ public struct DeezerLibrary: Sendable {
         )
     }
 
-    public func searchTracks(_ query: String, start: Int, limit: Int = 40) async throws -> (
-        [TrackSummary], Int
-    ) {
-        let (items, total) = try await session.search(query: query, kind: .track, start: start, limit: limit)
-        return (items.map(TrackSummary.init(gateway:)), total)
-    }
-
-    public func searchAlbums(_ query: String, start: Int, limit: Int = 40) async throws -> (
-        [AlbumSummary], Int
-    ) {
-        let (items, total) = try await session.search(query: query, kind: .album, start: start, limit: limit)
-        return (items.map(AlbumSummary.init(gateway:)), total)
-    }
-
-    public func searchArtists(_ query: String, start: Int, limit: Int = 40) async throws -> (
-        [ArtistSummary], Int
-    ) {
-        let (items, total) = try await session.search(query: query, kind: .artist, start: start, limit: limit)
-        return (items.map(ArtistSummary.init(gateway:)), total)
-    }
-
-    public func searchPlaylists(_ query: String, start: Int, limit: Int = 40) async throws -> (
-        [PlaylistSummary], Int
-    ) {
-        let (items, total) = try await session.search(query: query, kind: .playlist, start: start, limit: limit)
-        return (items.map(PlaylistSummary.init(gateway:)), total)
+    public func search<Item: Searchable>(
+        _ query: String, as type: Item.Type = Item.self, start: Int, limit: Int = 40
+    ) async throws -> (items: [Item], total: Int) {
+        let (items, total) = try await session.search(query: query, kind: Item.searchKind, start: start, limit: limit)
+        return (items.map(Item.init(gateway:)), total)
     }
 
     // MARK: - Detail
@@ -52,14 +31,13 @@ public struct DeezerLibrary: Sendable {
     public func album(id: String) async throws -> AlbumDetail {
         async let pageTask = session.albumPage(id: id)
         async let entriesTask = session.albumTracks(id: id)
-        let page = try await pageTask
-        let data = page["DATA"]
-        let entries = try await entriesTask
-        let tracks = entries.map(TrackSummary.init(gateway:))
+        async let publicTask = session.publicAPI("album/\(id)")
+        let data = try await pageTask["DATA"]
+        let tracks = try await entriesTask.map(TrackSummary.init(gateway:))
+        let publicData = try? await publicTask
 
         var summary = AlbumSummary(gateway: data)
         if summary.trackCount == 0 { summary.trackCount = tracks.count }
-        let publicData = try? await session.publicAPI("album/\(id)")
 
         return AlbumDetail(
             summary: summary,
@@ -69,8 +47,6 @@ public struct DeezerLibrary: Sendable {
                 ?? data["ART_PICTURE"].stringValue ?? "",
             label: data["LABEL_NAME"].stringValue ?? publicData?["label"].stringValue ?? "",
             genres: publicData?["genres"]["data"].arrayValue.compactMap { $0["name"].stringValue } ?? [],
-            releaseDate: data["ORIGINAL_RELEASE_DATE"].stringValue
-                ?? data["DIGITAL_RELEASE_DATE"].stringValue ?? "",
             duration: tracks.reduce(0) { $0 + $1.duration },
             discTotal: data["NUMBER_DISK"].intValue ?? 1
         )
@@ -92,29 +68,11 @@ public struct DeezerLibrary: Sendable {
         async let pageTask = session.artistPage(id: id)
         async let discographyTask = session.artistDiscography(id: id)
         let page = try await pageTask
-        let discography = try await discographyTask
-
-        var albums: [ArtistTab: [AlbumSummary]] = [:]
-        albums[.all] = discography.map(AlbumSummary.init(gateway:))
-        for tab in ArtistTab.allCases where tab != .all {
-            let filtered = discography.filter { entry in
-                let official = entry["ARTISTS_ALBUMS_IS_OFFICIAL"].boolValue ?? false
-                let role = entry["ROLE_ID"].intValue ?? 0
-                let type = RecordType(gatewayType: entry["TYPE"].stringValue, publicType: nil)
-                return switch tab {
-                case .featured: role == 5
-                case .more: !official && role != 5
-                default: official && role != 5 && type.rawValue == tab.rawValue
-                }
-            }
-            if !filtered.isEmpty { albums[tab] = filtered.map(AlbumSummary.init(gateway:)) }
-        }
-
         return ArtistDetail(
             summary: ArtistSummary(gateway: page["DATA"]),
             biography: page["BIO"]["BIO"].stringValue?.strippingHTML ?? "",
             topTracks: page["TOP"]["data"].arrayValue.map(TrackSummary.init(gateway:)),
-            albums: albums
+            albums: ArtistTab.sorting(try await discographyTask, artistID: id)
         )
     }
 
@@ -146,24 +104,20 @@ public struct DeezerLibrary: Sendable {
     /// Everything home shows, gathered at once. Only the charts are load-bearing: the personal
     /// rows drop out quietly if the account has nothing to show or the gateway declines.
     public func home() async throws -> HomeFeed {
+        let userID = await session.user?.id ?? ""
         async let historyTask = recentlyPlayed()
-        async let personalTask = favorites()
+        async let playlistsTask = session.profileTab(userID: userID, tab: .playlists)
+        async let artistsTask = session.profileTab(userID: userID, tab: .artists)
         async let chartsTask = charts()
 
         let top = try await chartsTask
-        let personal = try? await personalTask
         return HomeFeed(
             history: (try? await historyTask) ?? [],
-            playlists: personal?.playlists ?? [],
-            artists: personal?.artists ?? [],
+            playlists: ((try? await playlistsTask) ?? []).map(PlaylistSummary.init(gateway:)),
+            artists: ((try? await artistsTask) ?? []).map(ArtistSummary.init(gateway:)),
             topAlbums: top.albums,
             topPlaylists: top.playlists
         )
-    }
-
-    public func lovedTracksLink() async -> DeezerLink? {
-        guard let user = await session.user, !user.lovedTracksID.isEmpty else { return nil }
-        return .playlist(user.lovedTracksID)
     }
 
     // MARK: - Discovery

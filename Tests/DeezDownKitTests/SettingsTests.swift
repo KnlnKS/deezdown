@@ -8,16 +8,18 @@ private func sandboxPaths() throws -> AppPaths {
     return AppPaths(configDirectory: root)
 }
 
-@Test func `a partial config keeps its own values and inherits the rest`() throws {
+@Test func `a partial or partly unreadable config keeps every value it can read`() throws {
     let paths = try sandboxPaths()
     defer { try? FileManager.default.removeItem(at: paths.configDirectory) }
 
-    try Data(#"{"maxBitrate":1,"queueConcurrency":3,"tags":{"lyrics":true}}"#.utf8)
+    // deemix stores numbers as strings; an unknown choice must cost only itself.
+    try Data(#"{"maxBitrate":"1","queueConcurrency":3,"overwriteFile":"?","tags":{"lyrics":true}}"#.utf8)
         .write(to: paths.settingsFile)
 
     let settings = SettingsStore(paths: paths).load()
     #expect(settings.maxBitrate == .mp3_128)
     #expect(settings.queueConcurrency == 3)
+    #expect(settings.overwriteFile == DownloadSettings().overwriteFile)
     #expect(settings.tags.lyrics)
     #expect(settings.tags.title)
     #expect(settings.albumTracknameTemplate == "%tracknumber% - %title%")

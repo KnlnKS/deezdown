@@ -25,7 +25,7 @@ struct Search: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let session = try await AppPaths.signIn(options, arl: arl)
+        let (session, _) = try await options.signIn(arl: arl)
         let library = DeezerLibrary(session: session)
         let words = query.joined(separator: " ")
         let start = (page - 1) * limit
@@ -54,28 +54,16 @@ struct Search: AsyncParsableCommand {
     }
 
     private func fetch(_ library: DeezerLibrary, words: String, kind: SearchKind, start: Int) async throws -> ResultPage {
-        let rows: [(String, DeezerLink)]
-        let total: Int
-        switch kind {
-        case .track:
-            let result = try await library.searchTracks(words, start: start, limit: limit)
-            rows = result.0.map { ("\($0.artist) — \($0.displayTitle) [\($0.album)]", $0.link) }
-            total = result.1
-        case .album:
-            let result = try await library.searchAlbums(words, start: start, limit: limit)
-            rows = result.0.map { ("\($0.artist) — \($0.title)", $0.link) }
-            total = result.1
-        case .artist:
-            let result = try await library.searchArtists(words, start: start, limit: limit)
-            rows = result.0.map { ($0.name, $0.link) }
-            total = result.1
-        case .playlist:
-            let result = try await library.searchPlaylists(words, start: start, limit: limit)
-            rows = result.0.map { ("\($0.title) — \($0.owner)", $0.link) }
-            total = result.1
+        func page<Item: Searchable>(_ type: Item.Type, _ line: (Item) -> String) async throws -> ResultPage {
+            let (items, total) = try await library.search(words, as: type, start: start, limit: limit)
+            return ResultPage(kind: kind, rows: items.map { (line($0), $0.link) }, total: total)
         }
-
-        return ResultPage(kind: kind, rows: rows, total: total)
+        return switch kind {
+        case .track: try await page(TrackSummary.self) { "\($0.artist) — \($0.title) [\($0.album)]" }
+        case .album: try await page(AlbumSummary.self) { "\($0.artist) — \($0.title)" }
+        case .artist: try await page(ArtistSummary.self) { $0.name }
+        case .playlist: try await page(PlaylistSummary.self) { "\($0.title) — \($0.owner)" }
+        }
     }
 
     private func printPage(_ result: ResultPage, start: Int) {

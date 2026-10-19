@@ -18,6 +18,7 @@ import Testing
     ("Title (feat. Someone)", "Title"),
     ("Title [ft. Someone]", "Title"),
     ("Title feat. Someone", "Title"),
+    ("Title feat. Someone (Remix)", "Title (Remix)"),
     ("Title", "Title"),
     ("Defeated", "Defeated"),
 ])
@@ -71,6 +72,7 @@ func `featured artists are stripped from titles without eating real words`(input
 
 @Test func `gateway values decode leniently whether deezer sends strings or numbers`() {
     #expect(JSONValue.string("3135556").intValue == 3_135_556)
+    #expect(JSONValue.string("").intValue == nil)
     #expect(JSONValue.int(3_135_556).stringValue == "3135556")
     #expect(JSONValue.string("1").boolValue == true)
     #expect(JSONValue.array([]).isEmpty)

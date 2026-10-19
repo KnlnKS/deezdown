@@ -68,8 +68,10 @@ struct ID3v2Writer {
         append("IPLS", payload)
     }
 
-    mutating func addPicture(_ image: Data, mimeType: String, description: String, useUnicode: Bool) {
-        guard !image.isEmpty else { return }
+    /// The front cover, described as deemix describes it.
+    mutating func addPicture(_ image: Data, useUnicode: Bool) {
+        let mimeType = ImageDimensions.mimeType(of: image)
+        let description = "cover"
         var payload: [UInt8] = []
         if useUnicode {
             payload.append(Self.unicodeEncoding)
@@ -86,6 +88,11 @@ struct ID3v2Writer {
         append("APIC", payload)
     }
 
+    /// A rating with no e-mail and no play counter, as deemix writes it.
+    mutating func addPopularimeter(rating: UInt8) {
+        append("POPM", [0x00, rating])
+    }
+
     private mutating func append(_ identifier: String, _ payload: [UInt8]) {
         frames += Array(identifier.utf8)
         let size = UInt32(payload.count)
@@ -96,8 +103,6 @@ struct ID3v2Writer {
         frames += [0x00, 0x00]
         frames += payload
     }
-
-    var isEmpty: Bool { frames.isEmpty }
 
     func data() -> Data {
         var output: [UInt8] = Array("ID3".utf8) + [0x03, 0x00, 0x00]
@@ -117,7 +122,4 @@ struct ID3v2Writer {
         bytes.reduce(0) { ($0 << 7) | Int($1 & 0x7F) }
     }
 
-    static func mimeType(for image: Data) -> String {
-        image.starts(with: [0x89, 0x50, 0x4E, 0x47]) ? "image/png" : "image/jpeg"
-    }
 }

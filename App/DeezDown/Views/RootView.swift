@@ -7,7 +7,7 @@ struct RootView: View {
     @State private var section: SidebarSection? = .home
     @State private var navigator = Navigator()
     @State private var searchText = ""
-    @State private var searchTab = SearchTab.all
+    @State private var searchTab: SearchKind?
     @State private var showAddLink = false
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 

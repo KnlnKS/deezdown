@@ -7,15 +7,9 @@ enum FLACTagWriter {
         case vorbisComment = 4, cueSheet = 5, picture = 6
     }
 
-    struct EmbeddedImage {
-        var data: Data
-        var mimeType: String
-        var description: String
-    }
-
     struct MalformedFLAC: Error {}
 
-    static func write(comments: [(String, String)], picture: EmbeddedImage?, to url: URL) throws {
+    static func write(comments: [(String, String)], picture: Data?, to url: URL) throws {
         let handle = try FileHandle(forUpdating: url)
         defer { try? handle.close() }
 
@@ -85,10 +79,11 @@ enum FLACTagWriter {
         return Data(bytes)
     }
 
-    static func pictureBlock(_ picture: EmbeddedImage) -> Data {
-        let dimensions = ImageDimensions.read(picture.data) ?? (0, 0, 24)
-        let mime = Array(picture.mimeType.utf8)
-        let description = Array(picture.description.utf8)
+    /// The front cover, described as deemix describes it.
+    static func pictureBlock(_ picture: Data) -> Data {
+        let dimensions = ImageDimensions.read(picture) ?? (0, 0, 24)
+        let mime = Array(ImageDimensions.mimeType(of: picture).utf8)
+        let description = Array("cover".utf8)
         var bytes = bigEndian(3)
         bytes += bigEndian(mime.count) + mime
         bytes += bigEndian(description.count) + description
@@ -96,7 +91,7 @@ enum FLACTagWriter {
         bytes += bigEndian(dimensions.height)
         bytes += bigEndian(dimensions.depth)
         bytes += bigEndian(0)
-        bytes += bigEndian(picture.data.count)
-        return Data(bytes) + picture.data
+        bytes += bigEndian(picture.count)
+        return Data(bytes) + picture
     }
 }

@@ -25,7 +25,7 @@ final class LibraryCache {
         entries[key] = Entry(value: value, storedAt: now)
     }
 
-    func invalidate(_ key: String? = nil) {
-        if let key { entries[key] = nil } else { entries.removeAll() }
+    func invalidate() {
+        entries.removeAll()
     }
 }

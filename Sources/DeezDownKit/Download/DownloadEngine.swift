@@ -4,24 +4,23 @@ import Synchronization
 public actor DownloadEngine {
     private struct TrackJob: Sendable {
         var itemID: String
+        var run: UUID
         var index: Int
-        var outcome: Result<ResolvedMedia, DownloadFailure>
+        var media: ResolvedMedia
     }
 
     private struct ItemState {
         var collection: ResolvedCollection
         var context: DownloadContext
-        var tracks: [Track]
-        var files: [URL?]
+        var extras: CollectionExtras
         var inFlight: [Int: Double] = [:]
         var remaining: Int
-        var artwork: Data?
-        var searched: [String] = []
-        var failures: [String] = []
+        /// Playlist entries carry only an album's ID and title; deemix fetches the rest per track.
+        var albums: [String: Task<Album?, Never>] = [:]
     }
 
     private let session: DeezerSession
-    private let paths: AppPaths
+    private let queueDirectory: URL?
     private let artworkStore = ArtworkStore()
     private let downloader = MediaDownloader()
     private let encoder = JSONEncoder()
@@ -34,15 +33,23 @@ public actor DownloadEngine {
     private var heldJobs: [TrackJob] = []
     private var activeWorkers = 0
     private var directorRunning = false
-    private var canceled: Set<String> = []
+    /// Each preparation of an item is a run. Cancelling, removing or retrying an item ends its
+    /// run, so work that wakes from an await to find another run has been handed on.
+    private var runs: [String: UUID] = [:]
+    private var transfers: [String: [Int: Task<Int64, any Error>]] = [:]
     private var lastProgressPublish: ContinuousClock.Instant?
     private var observers: [UUID: AsyncStream<[QueueItem]>.Continuation] = [:]
 
-    public init(session: DeezerSession, settings: DownloadSettings, paths: AppPaths = AppPaths()) {
+    /// Without a queue directory nothing is persisted, so a one-shot run such as the CLI
+    /// cannot overwrite the queue the app restores.
+    public init(session: DeezerSession, settings: DownloadSettings, queueDirectory: URL? = nil) {
         self.session = session
         self.settings = settings
-        self.paths = paths
-        try? paths.createDirectories()
+        self.settings.repair()
+        self.queueDirectory = queueDirectory
+        if let queueDirectory {
+            try? FileManager.default.createDirectory(at: queueDirectory, withIntermediateDirectories: true)
+        }
     }
 
     // MARK: - Observation
@@ -69,16 +76,13 @@ public actor DownloadEngine {
         for continuation in observers.values { continuation.yield(snapshot) }
     }
 
+    /// Settings arrive as typed, so the engine makes them usable itself.
     public func updateSettings(_ newValue: DownloadSettings) {
         settings = newValue
+        settings.repair()
     }
 
     // MARK: - Queueing
-
-    @discardableResult
-    public func enqueue(_ link: DeezerLink, format requested: TrackFormat? = nil) async throws -> [String] {
-        try await enqueue([link], format: requested)
-    }
 
     @discardableResult
     public func enqueue(_ links: [DeezerLink], format requested: TrackFormat? = nil) async throws -> [String] {
@@ -96,14 +100,12 @@ public actor DownloadEngine {
         for entry in pending {
             let id = QueueItem.identifier(for: entry.link, format: format)
             guard items[id] == nil else { continue }
-            // Queue ids are deterministic, so an id removed earlier must lose its tombstone
-            // or the fresh item would be treated as canceled the moment it resolved.
-            canceled.remove(id)
             var item = QueueItem(
                 id: id, link: entry.link, title: entry.title, subtitle: entry.subtitle,
                 cover: entry.cover, format: format
             )
             item.totalTracks = entry.trackCount
+            item.rootArtist = entry.rootArtist
             items[id] = item
             order.append(id)
             added.append(id)
@@ -122,6 +124,7 @@ public actor DownloadEngine {
         var subtitle: String
         var cover: Artwork
         var trackCount: Int
+        var rootArtist: ArtistRef?
     }
 
     /// Artist links become one queue entry per album, named from the discography listing.
@@ -136,66 +139,64 @@ public actor DownloadEngine {
                 )
             ]
         }
-        let resolver = LinkResolver(session: session, settings: settings)
-        return try await resolver.artistAlbums(id, tab: tab).map {
+        async let artistTask = session.artistData(id: id)
+        let albums = try await LinkResolver(session: session).artistAlbums(id, tab: tab)
+        let artist = (try? await artistTask).map(ArtistRef.init(gateway:))
+        return albums.map {
             PendingLink(
                 link: .album($0.id), title: $0.title, subtitle: $0.artist,
-                cover: $0.cover, trackCount: $0.trackCount
+                cover: $0.cover, trackCount: $0.trackCount, rootArtist: artist
             )
         }
     }
 
     public func cancel(_ id: String) {
-        guard var item = items[id] else { return }
-        canceled.insert(id)
-        jobs.removeAll { $0.itemID == id }
-        heldJobs.removeAll { $0.itemID == id }
-        if !item.status.isFinished {
-            item.status = .canceled
-            items[id] = item
-        }
-        states[id] = nil
-        persist(id)
+        cancel(Set([id]))
+    }
+
+    public func cancelAll() {
+        cancel(Set(order))
+    }
+
+    private func cancel(_ ids: Set<String>) {
+        let unfinished = ids.filter { items[$0].map { !$0.status.isFinished } ?? false }
+        guard !unfinished.isEmpty else { return }
+        stopWork(for: unfinished)
+        for id in unfinished { items[id]?.status = .canceled }
+        persist(unfinished)
         publish()
         pump()
     }
 
-    public func cancelAll() {
-        for id in order where !(items[id]?.status.isFinished ?? true) { canceled.insert(id) }
-        jobs.removeAll()
-        heldJobs.removeAll()
-        for id in order {
-            guard var item = items[id], !item.status.isFinished else { continue }
-            item.status = .canceled
-            items[id] = item
-        }
-        states.removeAll()
-        persist(order)
-        publish()
-    }
-
     public func remove(_ id: String) {
-        canceled.insert(id)
-        jobs.removeAll { $0.itemID == id }
-        heldJobs.removeAll { $0.itemID == id }
-        items[id] = nil
-        states[id] = nil
-        order.removeAll { $0 == id }
-        try? FileManager.default.removeItem(at: queueFile(id))
-        persistOrder()
-        publish()
+        stopWork(for: [id])
+        discard([id])
     }
 
-    /// Clears what needs no attention; items that failed stay so their errors can be read.
     public func clearFinished() {
-        let finished = Set(order.filter { [.completed, .canceled].contains(items[$0]?.status) })
-        guard !finished.isEmpty else { return }
-        for id in finished {
+        discard(Set(order.filter { items[$0]?.canClear == true }))
+    }
+
+    /// Drops queued and held tracks and aborts transfers in flight, so nothing more lands on
+    /// disk for these items.
+    private func stopWork(for ids: Set<String>) {
+        jobs.removeAll { ids.contains($0.itemID) }
+        heldJobs.removeAll { ids.contains($0.itemID) }
+        for id in ids {
+            runs[id] = nil
+            states.removeValue(forKey: id)?.albums.values.forEach { $0.cancel() }
+            transfers.removeValue(forKey: id)?.values.forEach { $0.cancel() }
+        }
+    }
+
+    private func discard(_ ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        for id in ids {
             items[id] = nil
             states[id] = nil
-            try? FileManager.default.removeItem(at: queueFile(id))
+            if let file = queueFile(id) { try? FileManager.default.removeItem(at: file) }
         }
-        order.removeAll { finished.contains($0) }
+        order.removeAll { ids.contains($0) }
         persistOrder()
         publish()
     }
@@ -222,12 +223,14 @@ public actor DownloadEngine {
         persist(id)
         publish()
         pump()
-        Task { await finishIfDone(id) }
+    }
+
+    public func resumeAll() {
+        for id in order where items[id]?.status == .paused { resume(id) }
     }
 
     public func retry(_ id: String) {
         guard var item = items[id], item.canRetry else { return }
-        canceled.remove(id)
         heldJobs.removeAll { $0.itemID == id }
         item.status = .queued
         item.completedTracks = 0
@@ -289,79 +292,87 @@ public actor DownloadEngine {
         items[id] = item
         publish()
 
+        let run = UUID()
+        runs[id] = run
         do {
-            let resolver = LinkResolver(session: session, settings: settings)
-            guard let collection = try await resolver.resolve(item.link).first else {
-                throw DownloadFailure(.notOnDeezer)
-            }
-            guard !canceled.contains(id) else { return }
+            let collection = try await LinkResolver(session: session).resolve(item.link)
+            guard runs[id] == run else { return }
 
-            let tracks = collection.tracks.map { $0.applying(settings) }
+            let count = collection.tracks.count
             let context = DownloadContext(
                 playlist: collection.playlist,
                 isSingleTrackDownload: collection.isSingleTrack,
-                rootArtist: collection.rootArtist,
+                rootArtist: item.rootArtist ?? collection.rootArtist,
                 format: item.format,
                 today: .today
             )
-
-            let resolvedMedia = try await MediaResolver(session: session, settings: settings)
-                .resolve(tracks, format: item.format)
-            guard !canceled.contains(id) else { return }
-
-            let artwork =
-                settings.tags.cover
-                ? await artworkStore.image(
-                    collection.cover, size: Artwork.clamped(settings.embeddedArtworkSize),
-                    format: settings.embeddedArtworkFormat)
-                : nil
-
+            // The albums start loading while the streams resolve; cancelling drops them with the state.
             states[id] = ItemState(
                 collection: collection,
                 context: context,
-                tracks: tracks,
-                files: Array(repeating: nil, count: tracks.count),
-                remaining: tracks.count,
-                artwork: artwork
+                extras: CollectionExtras(trackCount: count),
+                remaining: count,
+                albums: collection.playlist == nil ? [:] : prefetchAlbums(of: collection.tracks)
             )
+
+            // As in deemix, a search for a stand-in uses the metadata as Deezer gave it.
+            let resolvedMedia = try await MediaResolver(session: session, settings: settings)
+                .resolve(collection.tracks, format: item.format)
+            guard runs[id] == run else { return }
 
             item = items[id] ?? item
             item.title = collection.title
             item.subtitle = collection.subtitle
             item.cover = collection.cover
-            item.totalTracks = tracks.count
+            item.totalTracks = count
             if item.status != .paused { item.status = .downloading }
             items[id] = item
 
             for (index, outcome) in resolvedMedia.enumerated() {
                 switch outcome {
                 case .success(let media):
-                    let resolved = media.track.applying(settings)
-                    states[id]?.tracks[index] = resolved
                     if media.track.searched {
-                        states[id]?.searched.append(
-                            "\(tracks[index].mainArtist.name) - \(tracks[index].title) -> \(resolved.id)"
-                        )
+                        states[id]?.extras.searched.append("\(media.track.mainArtist.name) - \(media.track.title)")
                     }
-                    enqueueJob(TrackJob(itemID: id, index: index, outcome: .success(media)))
+                    enqueueJob(TrackJob(itemID: id, run: run, index: index, media: media))
                 case .failure(let failure):
-                    enqueueJob(TrackJob(itemID: id, index: index, outcome: .failure(failure)))
+                    record(id, index: index, failure: failure, track: collection.tracks[index].applying(settings))
                 }
             }
-            if tracks.isEmpty { await finish(id) }
+            await finishIfDone(id)
         } catch {
+            guard runs[id] == run else { return }
+            runs[id] = nil
+            states.removeValue(forKey: id)?.albums.values.forEach { $0.cancel() }
             item = items[id] ?? item
             item.status = .failed
             item.issues = [
                 TrackIssue(
                     id: item.id, title: item.title, artist: item.subtitle,
-                    message: (error as? DownloadFailure)?.message ?? error.localizedDescription
+                    message: error.localizedDescription
                 )
             ]
             items[id] = item
         }
         persist(id)
         publish()
+    }
+
+    /// Each album once, in track order and a few at a time, so the workers seldom wait and the
+    /// public API's rate limit is shared rather than swamped.
+    private func prefetchAlbums(of tracks: [Track]) -> [String: Task<Album?, Never>] {
+        let width = 6
+        var seen = Set<String>()
+        let ids = tracks.map(\.album.id).filter { $0 != "0" && seen.insert($0).inserted }
+        var tasks: [Task<Album?, Never>] = []
+        for (index, id) in ids.enumerated() {
+            let earlier = index >= width ? tasks[index - width] : nil
+            tasks.append(Task { [session] in
+                _ = await earlier?.value
+                return try? await session.enrichedAlbum(id: id)
+            })
+        }
+        return Dictionary(uniqueKeysWithValues: zip(ids, tasks))
     }
 
     private func enqueueJob(_ job: TrackJob) {
@@ -374,22 +385,23 @@ public actor DownloadEngine {
 
     // MARK: - Track execution
 
-    private func perform(_ job: TrackJob) async {
-        guard !canceled.contains(job.itemID), let state = states[job.itemID] else { return }
-        let track = state.tracks[job.index]
+    private func isCurrent(_ job: TrackJob) -> Bool { runs[job.itemID] == job.run }
 
-        let media: ResolvedMedia
-        switch job.outcome {
-        case .success(let resolved): media = resolved
-        case .failure(let failure):
-            record(job.itemID, index: job.index, failure: failure, track: track)
-            await finishIfDone(job.itemID)
-            return
-        }
+    private func perform(_ job: TrackJob) async {
+        guard isCurrent(job), let state = states[job.itemID] else { return }
+        let media = job.media
+        var track = media.track
+        if let pending = state.albums[track.album.id], let album = await pending.value { track.album = album }
+        track = track.applying(settings)
 
         let builder = PathBuilder(settings: settings)
+        let namesBPM = track.bpm == 0 && builder.filenameTemplate(for: state.context).contains("%bpm%")
+        if namesBPM { track.bpm = await session.publicTrackBPM(id: track.id) ?? 0 }
+        guard isCurrent(job) else { return }
+
         let destination = builder.paths(for: track, context: state.context)
         let base = destination.directory.appending(path: destination.filename)
+        let lrcFile = base.appendingPathExtension("lrc")
         let decision = OverwritePolicy.decide(
             base: base, format: media.format, duration: track.duration, mode: settings.overwriteFile
         )
@@ -397,8 +409,16 @@ public actor DownloadEngine {
         let file: URL
         let needsAudio: Bool
         switch decision {
-        // A file that is already there needs no BPM, no lyrics and no request.
+        // A file that is already there needs no BPM, no cover and, unless its .lrc is missing,
+        // no lyrics.
         case .skip(let existing):
+            let writesLRC =
+                settings.syncedLyrics && !FileManager.default.fileExists(atPath: lrcFile.path(percentEncoded: false))
+            let found = writesLRC ? await lyrics(for: track) : nil
+            guard isCurrent(job) else { return }
+            if let found { try? LRCWriter.write(found, to: lrcFile, overwrite: false) }
+            states[job.itemID]?.extras.noteArtwork(
+                for: track, at: destination, context: state.context, settings: settings)
             complete(job.itemID, index: job.index, file: existing)
             await finishIfDone(job.itemID)
             return
@@ -406,83 +426,86 @@ public actor DownloadEngine {
         case .download(let target): (file, needsAudio) = (target, true)
         }
 
-        let needsLyrics =
-            settings.tags.lyrics || settings.tags.syncedLyrics || settings.syncedLyrics
-        async let extras = trackExtras(for: track, needsLyrics: needsLyrics)
+        // Fetched while the audio streams.
+        let named = track
+        let needsLyrics = settings.tags.lyrics || settings.tags.syncedLyrics || settings.syncedLyrics
+        async let bpm = settings.tags.bpm && named.bpm == 0 && !namesBPM ? session.publicTrackBPM(id: named.id) : nil
+        async let lyrics = needsLyrics ? lyrics(for: named) : nil
+        async let artwork =
+            settings.tags.cover
+            ? artworkStore.image(
+                named.album.cover, size: settings.embeddedArtworkSize, format: settings.embeddedArtworkFormat)
+            : nil
 
         if needsAudio {
-            let itemID = job.itemID
-            let index = job.index
             let lastReported = Mutex<Double>(0)
-            do {
-                try await downloader.download(media, to: file) { [weak self] written, total in
-                    guard total > 0 else { return }
-                    let fraction = min(1, Double(written) / Double(total))
-                    let shouldReport = lastReported.withLock { last -> Bool in
-                        guard fraction - last >= 0.01 || fraction >= 1 else { return false }
-                        last = fraction
-                        return true
-                    }
-                    guard shouldReport, let self else { return }
-                    Task { await self.report(itemID: itemID, index: index, fraction: fraction) }
+            let onProgress: @Sendable (Int64, Int64) -> Void = { [weak self] written, total in
+                guard total > 0 else { return }
+                let fraction = min(1, Double(written) / Double(total))
+                let shouldReport = lastReported.withLock { last -> Bool in
+                    guard fraction - last >= 0.01 || fraction >= 1 else { return false }
+                    last = fraction
+                    return true
                 }
-            } catch {
-                _ = await extras
-                record(
-                    job.itemID, index: job.index,
-                    failure: error as? DownloadFailure ?? DownloadFailure(.network(error.localizedDescription)),
-                    track: track
-                )
+                guard shouldReport, let self else { return }
+                Task { await self.report(job, fraction: fraction) }
+            }
+            let transfer = Task { [downloader] in
+                try await downloader.download(media, to: file, onProgress: onProgress)
+            }
+            transfers[job.itemID, default: [:]][job.index] = transfer
+            let outcome = await transfer.result
+            // A cancelled item has already dropped its transfers, and a retry may have begun new ones.
+            guard isCurrent(job) else { return }
+            transfers[job.itemID]?[job.index] = nil
+            if case .failure(let error) = outcome {
+                record(job.itemID, index: job.index, failure: DownloadFailure(error), track: track)
                 await finishIfDone(job.itemID)
                 return
             }
         }
 
-        var enriched = track
-        let (bpm, lyrics) = await extras
-        enriched.bpm = bpm ?? enriched.bpm
-        enriched.lyrics = lyrics ?? enriched.lyrics
+        track.bpm = await bpm ?? track.bpm
+        track.lyrics = await lyrics ?? track.lyrics
+        let cover = await artwork
+        guard isCurrent(job) else { return }
 
-        let artwork = states[job.itemID]?.artwork
         do {
-            try Tagger.tag(
-                enriched, format: media.format, at: file, artwork: artwork, settings: settings
-            )
-            if settings.finderArtwork, let artwork, FinderIcon.isNeeded(for: media.format) {
-                await FinderIcon.apply(artwork, to: file)
+            try Tagger.tag(track, format: media.format, at: file, artwork: cover, settings: settings)
+            if settings.finderArtwork, let cover, FinderIcon.isNeeded(for: media.format) {
+                await FinderIcon.apply(cover, to: file)
             }
         } catch {
-            states[job.itemID]?.failures.append("\(track.id) tagging: \(error.localizedDescription)")
+            states[job.itemID]?.extras.fail(track, "Tagging failed: \(error.localizedDescription)")
         }
+        guard isCurrent(job) else { return }
 
-        if settings.syncedLyrics, let lyrics = enriched.lyrics, !lyrics.lines.isEmpty {
+        if settings.syncedLyrics, let lyrics = track.lyrics, !lyrics.lines.isEmpty {
             try? LRCWriter.write(
-                lyrics,
-                to: destination.directory.appending(path: "\(destination.filename).lrc"),
+                lyrics, to: lrcFile,
                 overwrite: settings.overwriteFile == .overwrite || settings.overwriteFile == .tagsOnly
             )
         }
 
+        states[job.itemID]?.extras.noteArtwork(for: track, at: destination, context: state.context, settings: settings)
         complete(job.itemID, index: job.index, file: file)
         await finishIfDone(job.itemID)
     }
 
-    private func trackExtras(for track: Track, needsLyrics: Bool) async -> (Double?, Lyrics?) {
-        async let bpm: Double? = settings.tags.bpm && track.bpm == 0
-            ? session.publicTrackBPM(id: track.id) : nil
-        async let lyrics: Lyrics? = needsLyrics && track.lyrics == nil && track.lyricsID != "0"
-            ? (try? await session.lyrics(trackID: track.id)).map(Lyrics.init(results:)) : nil
-        return (await bpm, await lyrics)
+    private func lyrics(for track: Track) async -> Lyrics? {
+        if let lyrics = track.lyrics { return lyrics }
+        guard track.lyricsID != "0" else { return nil }
+        return (try? await session.lyrics(trackID: track.id)).map(Lyrics.init(results:))
     }
 
     /// Eight tracks reporting every percent is a few hundred snapshots a second, and the
     /// screen can show one per frame. Whatever a tick drops, the next one carries, and
     /// finishing a track always publishes.
-    private func report(itemID: String, index: Int, fraction: Double) {
-        guard states[itemID] != nil, var item = items[itemID], item.status == .downloading else { return }
-        states[itemID]?.inFlight[index] = fraction
-        item.progress = progress(for: itemID, item: item)
-        items[itemID] = item
+    private func report(_ job: TrackJob, fraction: Double) {
+        guard isCurrent(job), var item = items[job.itemID], item.status == .downloading else { return }
+        states[job.itemID]?.inFlight[job.index] = fraction
+        item.progress = progress(for: job.itemID, item: item)
+        items[job.itemID] = item
 
         let now = ContinuousClock.now
         if let last = lastProgressPublish, now - last < .milliseconds(50) { return }
@@ -498,7 +521,7 @@ public actor DownloadEngine {
     }
 
     private func complete(_ id: String, index: Int, file: URL) {
-        states[id]?.files[index] = file
+        states[id]?.extras.files[index] = file
         states[id]?.inFlight[index] = nil
         states[id]?.remaining -= 1
         guard var item = items[id] else { return }
@@ -512,13 +535,13 @@ public actor DownloadEngine {
     private func record(_ id: String, index: Int, failure: DownloadFailure, track: Track) {
         states[id]?.inFlight[index] = nil
         states[id]?.remaining -= 1
-        states[id]?.failures.append("\(track.id) | \(track.mainArtist.name) - \(track.title) | \(failure.message)")
+        states[id]?.extras.fail(track, failure.localizedDescription)
         guard var item = items[id] else { return }
         item.failedTracks += 1
         item.issues.append(
             TrackIssue(
-                id: track.id, title: track.displayTitle, artist: track.mainArtist.name,
-                message: failure.message
+                id: track.id, title: track.title, artist: track.mainArtist.name,
+                message: failure.localizedDescription
             )
         )
         item.progress = progress(for: id, item: item)
@@ -526,114 +549,48 @@ public actor DownloadEngine {
         publish()
     }
 
-    private func finishIfDone(_ id: String) async {
-        guard let state = states[id], state.remaining <= 0 else { return }
-        await finish(id)
-    }
-
     // MARK: - Completion
 
-    private func finish(_ id: String) async {
-        guard var item = items[id] else { return }
-        let state = states[id]
-
-        if let state {
-            await writeExtras(id: id, item: item, state: state)
+    /// An item is done once every track is, paused or not: pausing holds back tracks that
+    /// have not started, and there are none left. Taking the state first means a second
+    /// caller finds nothing to finish, so extras are written once.
+    private func finishIfDone(_ id: String) async {
+        guard let state = states[id], state.remaining <= 0 else { return }
+        states[id] = nil
+        runs[id] = nil
+        transfers[id] = nil
+        state.albums.values.forEach { $0.cancel() }
+        if let item = items[id] {
+            await state.extras.write(
+                for: item, from: state.collection, context: state.context, settings: settings, artworkStore: artworkStore
+            )
         }
 
-        guard item.status != .paused else { return }
+        guard var item = items[id], !item.status.isFinished else { return }
         item.status =
             item.failedTracks == 0
             ? .completed : (item.completedTracks == 0 ? .failed : .withErrors)
         item.progress = 1
         items[id] = item
-        states[id] = nil
         persist(id)
         publish()
         pump()
     }
 
-    private func writeExtras(id: String, item: QueueItem, state: ItemState) async {
-        let builder = PathBuilder(settings: settings)
-        guard let firstTrack = state.tracks.first else { return }
-        let destination = builder.paths(for: firstTrack, context: state.context)
-
-        if settings.saveArtwork, !state.collection.cover.isEmpty {
-            let name = builder.collectionName(
-                settings.coverImageTemplate,
-                builder.albumVariables(firstTrack, state.context),
-                fallback: "cover"
-            )
-            for format in settings.localArtworkFormats {
-                if let data = await artworkStore.image(
-                    state.collection.cover,
-                    size: Artwork.clamped(settings.localArtworkSize),
-                    format: format
-                ) {
-                    try? data.write(
-                        to: destination.coverDirectory.appending(path: "\(name).\(format.fileExtension)")
-                    )
-                }
-            }
-        }
-
-        if settings.saveArtworkArtist, let artistDirectory = destination.artistDirectory,
-            !firstTrack.album.mainArtist.picture.isEmpty
-        {
-            let name = builder.collectionName(
-                settings.artistImageTemplate,
-                builder.artistVariables(firstTrack, state.context),
-                fallback: "folder"
-            )
-            if let data = await artworkStore.image(
-                firstTrack.album.mainArtist.picture,
-                size: Artwork.clamped(settings.localArtworkSize),
-                format: .jpeg(quality: settings.jpegImageQuality)
-            ) {
-                try? data.write(to: artistDirectory.appending(path: "\(name).jpg"))
-            }
-        }
-
-        if settings.createM3U8File, !state.collection.isSingleTrack {
-            let name = builder.collectionName(
-                settings.playlistFilenameTemplate,
-                [
-                    "title": item.title, "artist": item.subtitle, "size": String(state.tracks.count),
-                    "type": item.link.kind, "id": item.link.identifier,
-                    "playlist": state.collection.playlist?.title ?? "",
-                    "bitrate": item.format.displayName,
-                ],
-                fallback: "playlist"
-            )
-            try? M3U8Writer.write(
-                files: state.files,
-                to: destination.extrasDirectory.appending(path: "\(name).m3u8"),
-                relativeTo: destination.extrasDirectory
-            )
-        }
-
-        if settings.logErrors, !state.failures.isEmpty {
-            try? LogWriter.append(state.failures, to: destination.extrasDirectory.appending(path: "errors.txt"))
-        }
-        if settings.logSearched, !state.searched.isEmpty {
-            try? LogWriter.append(state.searched, to: destination.extrasDirectory.appending(path: "searched.txt"))
-        }
-    }
-
     // MARK: - Persistence
 
-    private var orderFile: URL { paths.queueDirectory.appending(path: "order.json") }
+    private var orderFile: URL? { queueDirectory?.appending(path: "order.json") }
 
-    private func queueFile(_ id: String) -> URL {
-        paths.queueDirectory.appending(path: "\(id).json")
+    private func queueFile(_ id: String) -> URL? {
+        queueDirectory?.appending(path: "\(id).json")
     }
 
     /// Only what changed goes to disk. Rewriting every entry on every event put one file
     /// write per queued item in the path of each finished track.
     private func persist(_ ids: some Sequence<String>) {
         for id in ids {
-            guard let item = items[id] else { continue }
-            try? encoder.encode(item).write(to: queueFile(id), options: .atomic)
+            guard let item = items[id], let file = queueFile(id) else { continue }
+            try? encoder.encode(item).write(to: file, options: .atomic)
         }
     }
 
@@ -642,25 +599,27 @@ public actor DownloadEngine {
     }
 
     private func persistOrder() {
+        guard let orderFile else { return }
         try? encoder.encode(order).write(to: orderFile, options: .atomic)
     }
 
-    /// Restores the queue but never auto-starts it, matching deemix.
+    /// Restores the queue without starting it, as deemix does. Anything unfinished comes
+    /// back paused, so it reads as waiting on the user and Resume picks it up.
     public func restore() {
         items.removeAll()
         order.removeAll()
 
         let decoder = JSONDecoder()
-        guard let data = try? Data(contentsOf: orderFile),
+        guard let orderFile, let data = try? Data(contentsOf: orderFile),
             let saved = try? decoder.decode([String].self, from: data)
         else { return }
 
         for id in saved {
-            guard let itemData = try? Data(contentsOf: queueFile(id)),
+            guard let file = queueFile(id), let itemData = try? Data(contentsOf: file),
                 var item = try? decoder.decode(QueueItem.self, from: itemData)
             else { continue }
-            if item.status.isActive {
-                item.status = .queued
+            if !item.status.isFinished {
+                item.status = .paused
                 item.progress = 0
                 item.completedTracks = 0
                 item.failedTracks = 0

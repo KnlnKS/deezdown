@@ -51,14 +51,6 @@ public enum TextCasing: String, Sendable, Codable, CaseIterable {
     }
 }
 
-public enum DateFormat: String, Sendable, Codable, CaseIterable {
-    case ymd = "Y-M-D"
-    case ydm = "Y-D-M"
-    case dmy = "D-M-Y"
-    case mdy = "M-D-Y"
-    case y = "Y"
-}
-
 public enum ArtistSeparator: String, Sendable, Codable, CaseIterable {
     case standard = "default"
     case mainOnly = "nothing"
@@ -154,6 +146,8 @@ public struct DownloadSettings: Sendable, Codable, Equatable {
     public var logSearched = false
     public var createM3U8File = false
     public var syncedLyrics = false
+    /// Run through the shell after each download, with %folder% and %filename% filled in.
+    public var executeCommand = ""
 
     public var saveArtwork = true
     public var saveArtworkArtist = false
@@ -164,7 +158,8 @@ public struct DownloadSettings: Sendable, Codable, Equatable {
     public var jpegImageQuality = 90
     public var finderArtwork = true
 
-    public var dateFormat = DateFormat.ymd
+    /// Y, M and D stand for the year, month and day.
+    public var dateFormat = "Y-M-D"
     public var albumVariousArtists = true
     public var removeAlbumVersion = false
     public var removeDuplicateArtists = true
@@ -201,20 +196,19 @@ public struct DownloadSettings: Sendable, Codable, Equatable {
             downloadLocation = Self.defaultMusicFolder
         }
         let defaults = DownloadSettings()
-        if tracknameTemplate.isEmpty { tracknameTemplate = defaults.tracknameTemplate }
-        if albumTracknameTemplate.isEmpty { albumTracknameTemplate = defaults.albumTracknameTemplate }
-        if playlistTracknameTemplate.isEmpty { playlistTracknameTemplate = defaults.playlistTracknameTemplate }
-        if playlistNameTemplate.isEmpty { playlistNameTemplate = defaults.playlistNameTemplate }
-        if artistNameTemplate.isEmpty { artistNameTemplate = defaults.artistNameTemplate }
-        if albumNameTemplate.isEmpty { albumNameTemplate = defaults.albumNameTemplate }
-        if playlistFilenameTemplate.isEmpty { playlistFilenameTemplate = defaults.playlistFilenameTemplate }
-        if coverImageTemplate.isEmpty { coverImageTemplate = defaults.coverImageTemplate }
-        if artistImageTemplate.isEmpty { artistImageTemplate = defaults.artistImageTemplate }
-        if illegalCharacterReplacer.isEmpty { illegalCharacterReplacer = defaults.illegalCharacterReplacer }
+        let templates: [WritableKeyPath<Self, String>] = [
+            \.tracknameTemplate, \.albumTracknameTemplate, \.playlistTracknameTemplate, \.playlistNameTemplate,
+            \.artistNameTemplate, \.albumNameTemplate, \.playlistFilenameTemplate, \.coverImageTemplate,
+            \.artistImageTemplate, \.dateFormat,
+        ]
+        for template in templates where self[keyPath: template].isEmpty {
+            self[keyPath: template] = defaults[keyPath: template]
+        }
+        // An empty replacer deletes illegal characters; one that is itself illegal would make folders.
+        illegalCharacterReplacer.removeAll { NameSanitizer.illegal.contains($0) }
         queueConcurrency = max(1, min(queueConcurrency, 16))
         paddingSize = max(0, min(paddingSize, 8))
         jpegImageQuality = max(1, min(jpegImageQuality, 100))
-        // Deezer degrades artwork past 1200px, so that is the real ceiling.
         embeddedArtworkSize = min(max(56, embeddedArtworkSize), Artwork.maximumSize)
         localArtworkSize = min(max(56, localArtworkSize), Artwork.maximumSize)
         if localArtworkFormats.isEmpty { localArtworkFormat = defaults.localArtworkFormat }

@@ -4,17 +4,11 @@ import SwiftUI
 struct FavoritesScreen: View {
     @Environment(AppModel.self) private var model
     @State private var state: LoadState<SearchResults> = .loading
-    @State private var tab: Tab = .playlists
-
-    enum Tab: String, CaseIterable, Identifiable {
-        case playlists, albums, artists, tracks
-        var id: String { rawValue }
-        var title: String { rawValue.capitalized }
-    }
+    @State private var tab = SearchKind.playlist
 
     var body: some View {
         VStack(spacing: 0) {
-            UnderlineTabs(selection: $tab, options: Tab.allCases.map { ($0, $0.title) })
+            UnderlineTabs(selection: $tab, options: [SearchKind.playlist, .album, .artist, .track].map { ($0, $0.title) })
                 .padding(.horizontal, Metrics.gutter)
                 .padding(.top, 16)
                 .padding(.bottom, 8)
@@ -26,6 +20,14 @@ struct FavoritesScreen: View {
         .navigationTitle("Favorites")
         .toolbar {
             ToolbarItem {
+                if tab == .track, let lovedTracks = model.user?.lovedTracks {
+                    Button("Download All", systemImage: "arrow.down.circle") {
+                        Task { await model.enqueue(lovedTracks) }
+                    }
+                    .help("Download every favorite track")
+                }
+            }
+            ToolbarItem {
                 RefreshButton { Task { await load(force: true) } }
             }
         }
@@ -36,16 +38,16 @@ struct FavoritesScreen: View {
         AsyncContent(state: state, retry: { Task { await load(force: true) } }) { results in
             Group {
                 switch tab {
-                case .playlists where results.playlists.isEmpty,
-                    .albums where results.albums.isEmpty,
-                    .artists where results.artists.isEmpty,
-                    .tracks where results.tracks.isEmpty:
+                case .playlist where results.playlists.isEmpty,
+                    .album where results.albums.isEmpty,
+                    .artist where results.artists.isEmpty,
+                    .track where results.tracks.isEmpty:
                     ContentUnavailableView {
                         Label("No Favorite \(tab.title)", systemImage: "heart")
                     } description: {
-                        Text("\(tab.title.capitalized) you favorite on Deezer show up here.")
+                        Text("\(tab.title) you favorite on Deezer show up here.")
                     }
-                case .tracks:
+                case .track:
                     List {
                         ForEach(Array(results.tracks.enumerated()), id: \.element.id) { index, track in
                             TrackRow(track: track, index: index + 1, showsArtwork: true, showsAlbum: true)
@@ -63,9 +65,9 @@ struct FavoritesScreen: View {
     @ViewBuilder
     private func grid(_ results: SearchResults) -> some View {
         switch tab {
-        case .albums:
+        case .album:
             CardGrid(items: results.albums) { MediaCard($0) }
-        case .artists:
+        case .artist:
             CardGrid(items: results.artists) { MediaCard($0) }
         default:
             CardGrid(items: results.playlists) { MediaCard($0) }

@@ -15,7 +15,7 @@ struct SidebarView: View {
             }
             Section {
                 Label(SidebarSection.downloads.title, systemImage: SidebarSection.downloads.symbol)
-                    .badge(model.activeDownloads)
+                    .badge(model.summary.active)
                     .tag(SidebarSection.downloads)
             }
         }
@@ -63,7 +63,6 @@ struct SidebarView: View {
 
     private var planDescription: String {
         guard let user = model.user else { return "—" }
-        let plan = user.canStreamLossless ? "Lossless" : (user.canStreamHQ ? "High Quality" : "Standard")
-        return "\(plan) · \(user.country)"
+        return "\(user.plan) · \(user.country)"
     }
 }

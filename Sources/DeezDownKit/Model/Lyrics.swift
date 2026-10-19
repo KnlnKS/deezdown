@@ -1,19 +1,14 @@
 import Foundation
 
-public struct Lyrics: Sendable, Codable, Equatable {
-    public struct Line: Sendable, Codable, Equatable {
+public struct Lyrics: Sendable, Equatable {
+    public struct Line: Sendable, Equatable {
         public var timestamp: String
         public var milliseconds: Int
         public var text: String
     }
 
-    public var id: String
     public var unsynced: String?
     public var lines: [Line]
-    public var copyright: String?
-    public var writers: String?
-
-    public var isEmpty: Bool { (unsynced?.isEmpty ?? true) && lines.isEmpty }
 
     /// Every entry, in order; blank lines borrow the timestamp of the next timed line.
     public var lrc: String {
@@ -33,10 +28,7 @@ public struct Lyrics: Sendable, Codable, Equatable {
     }
 
     init(results: JSONValue) {
-        id = results["LYRICS_ID"].stringValue ?? "0"
         unsynced = results["LYRICS_TEXT"].stringValue
-        copyright = results["LYRICS_COPYRIGHTS"].stringValue
-        writers = results["LYRICS_WRITERS"].stringValue
         lines = results["LYRICS_SYNC_JSON"].arrayValue.map { entry in
             Line(
                 timestamp: entry["lrc_timestamp"].stringValue ?? "",

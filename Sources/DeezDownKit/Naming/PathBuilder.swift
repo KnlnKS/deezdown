@@ -26,12 +26,8 @@ public struct DownloadPaths: Sendable, Equatable {
     public var filename: String
     public var directory: URL
     public var artistDirectory: URL?
-    public var coverDirectory: URL
+    public var coverDirectory: URL?
     public var extrasDirectory: URL
-
-    public func file(extension fileExtension: String) -> URL {
-        directory.appending(path: "\(filename).\(fileExtension)")
-    }
 }
 
 public struct PathBuilder: Sendable {
@@ -41,7 +37,7 @@ public struct PathBuilder: Sendable {
         self.settings = settings
     }
 
-    public func trackVariables(_ track: Track, _ context: DownloadContext) -> [String: String] {
+    public func trackVariables(_ track: Track, _ context: DownloadContext) -> TemplateVariables {
         let date = track.date ?? track.album.date
         let featured = track.featuredArtistsString
         return [
@@ -60,7 +56,7 @@ public struct PathBuilder: Sendable {
             "disctotal": String(track.album.discTotal),
             "genre": track.album.genres.first ?? "Unknown",
             "year": date?.year ?? "",
-            "date": track.dateString,
+            "date": track.date?.formatted(settings.dateFormat) ?? "",
             "bpm": track.bpm > 0 ? String(Int(track.bpm.rounded())) : "",
             "label": track.album.label,
             "isrc": track.isrc,
@@ -78,7 +74,7 @@ public struct PathBuilder: Sendable {
         ]
     }
 
-    public func albumVariables(_ track: Track, _ context: DownloadContext) -> [String: String] {
+    public func albumVariables(_ track: Track, _ context: DownloadContext) -> TemplateVariables {
         let album = track.album
         return [
             "album": album.title,
@@ -92,17 +88,17 @@ public struct PathBuilder: Sendable {
             "playlist": context.playlist?.title ?? "",
             "tracktotal": String(album.trackTotal),
             "disctotal": String(album.discTotal),
-            "type": album.recordType.displayName,
+            "type": album.recordType.rawValue.prefix(1).uppercased() + album.recordType.rawValue.dropFirst(),
             "upc": album.barcode,
             "explicit": album.explicit ? "(Explicit)" : "",
             "label": album.label,
             "year": album.date?.year ?? "",
-            "date": album.dateString,
+            "date": album.date?.formatted(settings.dateFormat) ?? "",
             "bitrate": context.format.displayName,
         ]
     }
 
-    public func artistVariables(_ track: Track, _ context: DownloadContext) -> [String: String] {
+    public func artistVariables(_ track: Track, _ context: DownloadContext) -> TemplateVariables {
         [
             "artist": track.album.mainArtist.name,
             "artist_id": track.album.mainArtist.id,
@@ -111,16 +107,16 @@ public struct PathBuilder: Sendable {
         ]
     }
 
-    public func playlistVariables(_ playlist: Playlist, _ context: DownloadContext) -> [String: String] {
+    public func playlistVariables(_ playlist: Playlist, _ context: DownloadContext) -> TemplateVariables {
         [
             "playlist": playlist.title,
             "playlist_id": playlist.id,
             "owner": playlist.owner,
             "owner_id": playlist.ownerID,
             "year": playlist.date?.year ?? "",
-            "date": playlist.date?.formatted(settings.dateFormat.rawValue) ?? "",
+            "date": playlist.date?.formatted(settings.dateFormat) ?? "",
             "explicit": playlist.explicit ? "(Explicit)" : "",
-            "today": context.today.formatted(settings.dateFormat.rawValue),
+            "today": context.today.formatted(settings.dateFormat),
         ]
     }
 
@@ -132,17 +128,13 @@ public struct PathBuilder: Sendable {
         var directory = URL(fileURLWithPath: settings.downloadLocation, isDirectory: true)
 
         if insidePlaylist, settings.createPlaylistFolder, let playlist = context.playlist {
-            directory = directory.appending(
-                path: component(settings.playlistNameTemplate, playlistVariables(playlist, context))
-            )
+            directory = nest(directory, settings.playlistNameTemplate, playlistVariables(playlist, context))
         }
-        var extrasDirectory: URL? = insidePlaylist ? directory : nil
+        let playlistDirectory = insidePlaylist ? directory : nil
 
         var artistDirectory: URL?
         if followsAlbumStructure, settings.createArtistFolder {
-            directory = directory.appending(
-                path: component(settings.artistNameTemplate, artistVariables(track, context))
-            )
+            directory = nest(directory, settings.artistNameTemplate, artistVariables(track, context))
             artistDirectory = directory
         }
 
@@ -151,58 +143,87 @@ public struct PathBuilder: Sendable {
             && (!context.isSingleTrackDownload || settings.createSingleFolder)
         var coverDirectory: URL?
         if wantsAlbumFolder {
-            directory = directory.appending(
-                path: component(settings.albumNameTemplate, albumVariables(track, context))
-            )
+            directory = nest(directory, settings.albumNameTemplate, albumVariables(track, context))
             coverDirectory = directory
         }
-
-        let extras = extrasDirectory ?? directory
-        extrasDirectory = extras
+        let extrasDirectory = playlistDirectory ?? directory
 
         if wantsAlbumFolder, settings.createCDFolder, track.album.discTotal > 1 {
             directory = directory.appending(path: "CD\(track.discNumber)")
         }
 
-        let template =
-            if insidePlaylist {
-                settings.playlistTracknameTemplate
-            } else if context.isSingleTrackDownload && !settings.createSingleFolder {
-                settings.tracknameTemplate
-            } else {
-                settings.albumTracknameTemplate
-            }
-
-        var rendered = TemplateEngine.render(template, trackVariables(track, context))
-        rendered = NameSanitizer.fixName(rendered, replacer: settings.illegalCharacterReplacer)
-        rendered = NameSanitizer.fixLongName(rendered)
-
-        // A separator that survives sanitization becomes a real subfolder, as in deemix.
-        if let slash = rendered.firstIndex(of: "/") {
-            directory = directory.appending(path: NameSanitizer.antiDot(String(rendered[..<slash])))
-            rendered = String(rendered[rendered.index(after: slash)...])
-        }
+        var parts = components(filenameTemplate(for: context), trackVariables(track, context))
+        let filename = parts.removeLast()
 
         return DownloadPaths(
-            filename: NameSanitizer.antiDot(rendered),
-            directory: directory,
+            filename: filename,
+            directory: parts.reduce(directory) { $0.appending(path: $1) },
             artistDirectory: artistDirectory,
-            coverDirectory: coverDirectory ?? extras,
-            extrasDirectory: extras
+            coverDirectory: coverDirectory,
+            extrasDirectory: extrasDirectory
         )
     }
 
-    /// Collection filenames must stay a single component, so a rendered slash is replaced.
-    public func collectionName(_ template: String, _ variables: [String: String], fallback: String) -> String {
-        let rendered = TemplateEngine.render(template, variables)
-            .replacingOccurrences(of: "/", with: settings.illegalCharacterReplacer)
-        let cleaned = NameSanitizer.component(rendered, replacer: settings.illegalCharacterReplacer)
-        return cleaned == "dot" || cleaned.isEmpty ? fallback : cleaned
+    /// As in deemix, the template follows what was asked for: a playlist, even one saved as a
+    /// compilation, names its tracks with the playlist template.
+    public func filenameTemplate(for context: DownloadContext) -> String {
+        if context.playlist != nil {
+            settings.playlistTracknameTemplate
+        } else if context.isSingleTrackDownload && !settings.createSingleFolder {
+            settings.tracknameTemplate
+        } else {
+            settings.albumTracknameTemplate
+        }
     }
 
-    private func component(_ template: String, _ variables: [String: String]) -> String {
-        let rendered = TemplateEngine.render(template, variables)
-        let cleaned = NameSanitizer.component(rendered, replacer: settings.illegalCharacterReplacer)
-        return cleaned.isEmpty ? "Unknown" : cleaned
+    public func collectionVariables(_ item: QueueItem, playlist: Playlist?, size: Int) -> TemplateVariables {
+        [
+            "title": item.title,
+            "artist": item.subtitle,
+            "size": String(size),
+            "type": item.link.kind,
+            "id": item.link.identifier,
+            "playlist": playlist?.title ?? "",
+            "bitrate": item.format.displayName,
+        ]
     }
+
+    /// Cover, artist image and playlist file names stay a single component.
+    public func collectionName(_ template: String, _ variables: TemplateVariables, fallback: String) -> String {
+        let name = components(template, variables).joined(separator: settings.illegalCharacterReplacer)
+        return name == "dot" ? fallback : name
+    }
+
+    private func nest(_ directory: URL, _ template: String, _ variables: TemplateVariables) -> URL {
+        components(template, variables).reduce(directory) { $0.appending(path: $1) }
+    }
+
+    /// Values are made safe before they go in, so only a slash in the template itself makes a
+    /// folder, as in deemix.
+    private func components(_ template: String, _ variables: TemplateVariables) -> [String] {
+        let replacer = settings.illegalCharacterReplacer
+        let rendered = TemplateEngine.render(template, variables) { NameSanitizer.fixName($0, replacer: replacer) }
+        let parts = rendered.replacingOccurrences(of: "\\", with: "/").split(separator: "/").map {
+            NameSanitizer.component($0.trimmingCharacters(in: .whitespaces), replacer: replacer)
+        }
+        return parts.isEmpty ? ["dot"] : parts
+    }
+}
+
+/// The placeholders each template can use, read off the variables a download fills in, so
+/// Settings can't offer one that would render as itself.
+extension PathBuilder {
+    private static let blank = (
+        builder: PathBuilder(settings: DownloadSettings()), track: Track(gateway: .null), context: DownloadContext()
+    )
+
+    public static let trackTokens = blank.builder.trackVariables(blank.track, blank.context).map(\.key)
+    public static let albumTokens = blank.builder.albumVariables(blank.track, blank.context).map(\.key)
+    public static let artistTokens = blank.builder.artistVariables(blank.track, blank.context).map(\.key)
+    public static let playlistTokens = blank.builder.playlistVariables(Playlist(gateway: .null), blank.context)
+        .map(\.key)
+    public static let collectionTokens = blank.builder.collectionVariables(
+        QueueItem(id: "", link: .track(""), title: "", subtitle: "", cover: Artwork(md5: "", kind: .cover), format: .flac),
+        playlist: nil, size: 0
+    ).map(\.key)
 }

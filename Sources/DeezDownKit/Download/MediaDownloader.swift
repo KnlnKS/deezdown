@@ -35,13 +35,11 @@ public final class MediaDownloader: Sendable {
         for url in media.urls {
             do {
                 return try await stream(url, trackID: media.track.id, to: destination, onProgress: onProgress)
-            } catch let failure as DownloadFailure {
-                if failure.isCanceled { throw failure }
-                lastFailure = failure
-            } catch is CancellationError {
-                throw DownloadFailure(.canceled)
             } catch {
-                lastFailure = DownloadFailure(.network(error.localizedDescription))
+                if Task.isCancelled { throw CancellationError() }
+                lastFailure = DownloadFailure(error)
+                // Another mirror would only fill the disk again.
+                if lastFailure.reason == .noSpaceLeft { break }
             }
         }
         throw lastFailure
@@ -63,15 +61,13 @@ public final class MediaDownloader: Sendable {
         let partial = destination.appendingPathExtension("part")
         let manager = FileManager.default
         try manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard manager.createFile(atPath: partial.path(percentEncoded: false), contents: nil) else {
-            throw DownloadFailure(.noSpaceLeft)
-        }
-        let handle = try FileHandle(forWritingTo: partial)
-
-        let decryptor = Self.isEncrypted(url) ? try StripeDecryptor(trackID: trackID) : nil
         var written: Int64 = 0
 
         do {
+            try Data().write(to: partial)
+            let handle = try FileHandle(forWritingTo: partial)
+            defer { try? handle.close() }
+            let decryptor = Self.isEncrypted(url) ? try StripeDecryptor(trackID: trackID) : nil
             for try await chunk in body {
                 try Task.checkCancellation()
                 if let decryptor {
@@ -83,16 +79,15 @@ public final class MediaDownloader: Sendable {
                 written += Int64(chunk.count)
                 onProgress?(written, expected)
             }
+            // A canceled stream simply ends, which must not pass for a complete file.
+            try Task.checkCancellation()
             if let decryptor {
                 let tail = try decryptor.finish()
                 if !tail.isEmpty { try handle.write(contentsOf: tail) }
             }
-            try handle.close()
         } catch {
-            try? handle.close()
             try? manager.removeItem(at: partial)
-            if error is CancellationError { throw DownloadFailure(.canceled) }
-            throw DownloadFailure(.network(error.localizedDescription))
+            throw error
         }
 
         if manager.fileExists(atPath: destination.path(percentEncoded: false)) {

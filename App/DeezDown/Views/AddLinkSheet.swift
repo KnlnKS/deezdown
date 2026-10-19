@@ -56,7 +56,7 @@ struct AddLinkSheet: View {
         .onAppear {
             focused = true
             if let pasted = NSPasteboard.general.string(forType: .string),
-                (try? LinkParser.parse(pasted)) != nil
+                LinkParser.split(pasted).contains(where: LinkParser.isLink)
             {
                 text = pasted
             }

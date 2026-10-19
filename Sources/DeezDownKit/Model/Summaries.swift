@@ -1,9 +1,16 @@
 import Foundation
 
-public struct TrackSummary: Sendable, Identifiable, Equatable, Hashable {
+/// A kind of result one search tab lists.
+public protocol Searchable: Sendable, Identifiable {
+    static var searchKind: SearchKind { get }
+    var link: DeezerLink { get }
+    init(gateway: JSONValue)
+}
+
+public struct TrackSummary: Searchable, Equatable, Hashable {
+    public static let searchKind = SearchKind.track
     public var id: String
     public var title: String
-    public var version: String
     public var artist: String
     public var artistID: String
     public var album: String
@@ -15,13 +22,11 @@ public struct TrackSummary: Sendable, Identifiable, Equatable, Hashable {
     public var discNumber: Int
     public var previewURL: URL?
 
-    public var displayTitle: String { version.isEmpty ? title : "\(title) \(version)" }
     public var link: DeezerLink { .track(id) }
 
-    init(gateway: JSONValue) {
+    public init(gateway: JSONValue) {
         id = gateway["SNG_ID"].stringValue ?? "0"
-        title = gateway["SNG_TITLE"].stringValue ?? ""
-        version = gateway["VERSION"].stringValue ?? ""
+        title = (gateway["SNG_TITLE"].stringValue ?? "").withVersion(gateway["VERSION"].stringValue)
         artist = gateway["ART_NAME"].stringValue ?? ""
         artistID = gateway["ART_ID"].stringValue ?? "0"
         album = gateway["ALB_TITLE"].stringValue ?? ""
@@ -38,7 +43,8 @@ public struct TrackSummary: Sendable, Identifiable, Equatable, Hashable {
     }
 }
 
-public struct AlbumSummary: Sendable, Identifiable, Equatable, Hashable {
+public struct AlbumSummary: Searchable, Equatable, Hashable {
+    public static let searchKind = SearchKind.album
     public var id: String
     public var title: String
     public var artist: String
@@ -51,7 +57,7 @@ public struct AlbumSummary: Sendable, Identifiable, Equatable, Hashable {
 
     public var link: DeezerLink { .album(id) }
 
-    init(gateway: JSONValue) {
+    public init(gateway: JSONValue) {
         id = gateway["ALB_ID"].stringValue ?? "0"
         title = gateway["ALB_TITLE"].stringValue ?? ""
         artist = gateway["ART_NAME"].stringValue ?? ""
@@ -79,25 +85,25 @@ public struct AlbumSummary: Sendable, Identifiable, Equatable, Hashable {
     }
 }
 
-public struct ArtistSummary: Sendable, Identifiable, Equatable, Hashable {
+public struct ArtistSummary: Searchable, Equatable, Hashable {
+    public static let searchKind = SearchKind.artist
     public var id: String
     public var name: String
     public var picture: Artwork
     public var fans: Int
-    public var albumCount: Int
 
     public var link: DeezerLink { .artist(id, tab: .all) }
 
-    init(gateway: JSONValue) {
+    public init(gateway: JSONValue) {
         id = gateway["ART_ID"].stringValue ?? "0"
         name = gateway["ART_NAME"].stringValue ?? ""
         picture = Artwork(md5: gateway["ART_PICTURE"].stringValue ?? "", kind: .artist)
         fans = gateway["NB_FAN"].intValue ?? 0
-        albumCount = gateway["NB_ALBUM"].intValue ?? 0
     }
 }
 
-public struct PlaylistSummary: Sendable, Identifiable, Equatable, Hashable {
+public struct PlaylistSummary: Searchable, Equatable, Hashable {
+    public static let searchKind = SearchKind.playlist
     public var id: String
     public var title: String
     public var owner: String
@@ -107,7 +113,7 @@ public struct PlaylistSummary: Sendable, Identifiable, Equatable, Hashable {
 
     public var link: DeezerLink { .playlist(id) }
 
-    init(gateway: JSONValue) {
+    public init(gateway: JSONValue) {
         id = gateway["PLAYLIST_ID"].stringValue ?? "0"
         title = gateway["TITLE"].stringValue ?? ""
         owner = gateway["PARENT_USERNAME"].stringValue ?? ""
@@ -146,11 +152,6 @@ public struct HomeFeed: Sendable, Equatable {
     public var artists: [ArtistSummary] = []
     public var topAlbums: [AlbumSummary] = []
     public var topPlaylists: [PlaylistSummary] = []
-
-    public var isEmpty: Bool {
-        history.isEmpty && playlists.isEmpty && artists.isEmpty
-            && topAlbums.isEmpty && topPlaylists.isEmpty
-    }
 }
 
 public struct AlbumDetail: Sendable, Equatable {
@@ -159,7 +160,6 @@ public struct AlbumDetail: Sendable, Equatable {
     public var artistPicture: String
     public var label: String
     public var genres: [String]
-    public var releaseDate: String
     public var duration: Int
     public var discTotal: Int
 }

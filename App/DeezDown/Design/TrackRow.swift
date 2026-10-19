@@ -17,7 +17,7 @@ struct TrackRow: View {
             leading
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
-                    Text(track.displayTitle)
+                    Text(track.title)
                         .lineLimit(1)
                     if track.explicit { ExplicitBadge() }
                 }
@@ -143,7 +143,7 @@ struct SelectionFooter: View {
                 Spacer()
                 Button("Download Selection") {
                     let chosen = tracks.filter { selection.contains($0.id) }
-                    Task { await model.enqueue(tracks: chosen) }
+                    Task { await model.enqueue(chosen.map(\.link)) }
                 }
                 .buttonStyle(.borderedProminent)
             }

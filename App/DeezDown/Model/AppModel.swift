@@ -9,6 +9,26 @@ struct Toast: Identifiable, Equatable {
     var kind: Kind = .info
 }
 
+/// What the sidebar, menus and toolbar show about the queue. Progress changes the queue many
+/// times a second but this rarely, so views that need only this don't redraw on every tick.
+struct QueueSummary: Equatable {
+    var active = 0
+    var paused = 0
+    var downloadedTracks = 0
+    var canRetry = false
+    var canClear = false
+
+    init(_ queue: [QueueItem] = []) {
+        for item in queue {
+            if !item.status.isFinished { active += 1 }
+            if item.status == .paused { paused += 1 }
+            downloadedTracks += item.completedTracks
+            canRetry = canRetry || item.canRetry
+            canClear = canClear || item.canClear
+        }
+    }
+}
+
 @Observable
 final class AppModel {
     enum SignInState: Equatable {
@@ -33,8 +53,13 @@ final class AppModel {
 
     private(set) var signInState: SignInState = .signedOut
     private(set) var command: Command?
-    private(set) var queue: [QueueItem] = []
-    var settings: DownloadSettings
+    private(set) var queue: [QueueItem] = [] {
+        didSet {
+            let summary = QueueSummary(queue)
+            if summary != self.summary { self.summary = summary }
+        }
+    }
+    private(set) var summary = QueueSummary()
     var toast: Toast?
     var isRestoring = true
 
@@ -59,10 +84,6 @@ final class AppModel {
     var user: DeezerUser? { signInState.user }
     var isSignedIn: Bool { user != nil }
 
-    var activeDownloads: Int {
-        queue.filter { !$0.status.isFinished }.count
-    }
-
     // MARK: - Session
 
     func restore() async {
@@ -83,7 +104,7 @@ final class AppModel {
             signInState = .signedIn(user)
             await startEngine()
         } catch {
-            signInState = .failed(message(for: error))
+            signInState = .failed(error.localizedDescription)
         }
     }
 
@@ -100,7 +121,7 @@ final class AppModel {
     }
 
     private func startEngine() async {
-        let engine = DownloadEngine(session: session, settings: settings, paths: paths)
+        let engine = DownloadEngine(session: session, settings: settings, queueDirectory: paths.queueDirectory)
         await engine.restore()
         self.engine = engine
         queueObserver?.cancel()
@@ -114,24 +135,23 @@ final class AppModel {
 
     // MARK: - Settings
 
-    /// Settings change on every keystroke in a template field, so the write is coalesced.
-    /// Repair runs on the copy that is stored rather than on the bindings themselves —
-    /// otherwise clearing a field to retype it refills with the default mid-word.
-    func saveSettings() {
-        var repaired = settings
-        repaired.repair()
-        settingsWrite?.cancel()
-        settingsWrite = Task { [settingsStore, engine] in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            try? settingsStore.save(repaired)
-            await engine?.updateSettings(repaired)
+    /// Settings change on every keystroke in a template field, so each change schedules one
+    /// coalesced write. The store and the engine repair what they are given, never the
+    /// bindings: clearing a field to retype it would otherwise refill it mid-word.
+    var settings: DownloadSettings {
+        didSet {
+            settingsWrite?.cancel()
+            settingsWrite = Task { [settingsStore, engine, settings] in
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
+                try? settingsStore.save(settings)
+                await engine?.updateSettings(settings)
+            }
         }
     }
 
     func resetSettings() {
         settings = DownloadSettings()
-        saveSettings()
         show(Toast(message: "Settings reset to defaults", kind: .success))
     }
 
@@ -139,10 +159,6 @@ final class AppModel {
 
     func enqueue(_ link: DeezerLink, format: TrackFormat? = nil) async {
         await enqueue([link], format: format)
-    }
-
-    func enqueue(tracks: [TrackSummary], format: TrackFormat? = nil) async {
-        await enqueue(tracks.map(\.link), format: format)
     }
 
     /// A selection is queued in one go: one round trip, and one message rather than one
@@ -161,20 +177,21 @@ final class AppModel {
                 show(Toast(message: "Added \(added.count == 1 ? "1 item" : "\(added.count) items")", kind: .success))
             }
         } catch {
-            show(Toast(message: message(for: error), kind: .failure))
+            show(Toast(message: error.localizedDescription, kind: .failure))
         }
     }
 
     func enqueue(pasted text: String, format: TrackFormat? = nil) async {
-        var links: [DeezerLink] = []
-        for candidate in LinkParser.split(text) {
-            do {
-                links.append(try await LinkParser.resolve(candidate))
-            } catch {
-                show(Toast(message: message(for: error), kind: .failure))
-            }
+        let results = await LinkParser.resolveAll(LinkParser.split(text))
+        await enqueue(results.compactMap { try? $0.get() }, format: format)
+        // Shown last, so a link that was not understood is not hidden behind "Added".
+        let failures = results.compactMap { result -> String? in
+            guard case .failure(let error) = result else { return nil }
+            return error.localizedDescription
         }
-        await enqueue(links, format: format)
+        if let failure = failures.first {
+            show(Toast(message: failures.count == 1 ? failure : "\(failures.count) links weren't recognized", kind: .failure))
+        }
     }
 
     func pause(_ id: String) { Task { await engine?.pause(id) } }
@@ -183,6 +200,7 @@ final class AppModel {
     func remove(_ id: String) { Task { await engine?.remove(id) } }
     func retry(_ id: String) { Task { await engine?.retry(id) } }
     func cancelAll() { Task { await engine?.cancelAll() } }
+    func resumeAll() { Task { await engine?.resumeAll() } }
     func clearFinished() { Task { await engine?.clearFinished() } }
 
     func revealDownloads() {
@@ -223,18 +241,7 @@ final class AppModel {
             cache.store(fresh, for: key)
             state(.loaded(fresh))
         } catch {
-            state(.failed(message(for: error)))
-        }
-    }
-
-    func message(for error: any Error) -> String {
-        switch error {
-        case let failure as DownloadFailure: failure.message
-        case let deezer as DeezerError: deezer.errorDescription ?? "\(deezer)"
-        case LinkParseError.notRecognized: "That doesn't look like a Deezer link."
-        case LinkParseError.notSupported: "That kind of Deezer link isn't supported."
-        case LinkParseError.invalidID(let id): "\"\(id)\" isn't a valid Deezer id."
-        default: error.localizedDescription
+            state(.failed(error.localizedDescription))
         }
     }
 }

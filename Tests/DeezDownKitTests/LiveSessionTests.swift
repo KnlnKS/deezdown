@@ -48,7 +48,7 @@ struct LiveSession {
         let tokens = tracks.compactMap { $0["TRACK_TOKEN"].stringValue }
         let results = try await session.trackURLs(trackTokens: tokens, format: user.highestAvailableFormat)
         #expect(results.count == tokens.count)
-        #expect(results.allSatisfy { $0.urls.count >= 1 })
+        #expect(results.allSatisfy { if case .success = $0 { true } else { false } })
     }
 
     @Test func `a bad track token reports an error instead of a url`() async throws {

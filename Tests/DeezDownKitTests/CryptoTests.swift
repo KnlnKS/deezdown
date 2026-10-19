@@ -4,7 +4,7 @@ import Testing
 @testable import DeezDownKit
 
 @Test func `blowfish key matches the vector captured from a live download`() {
-    #expect(Hex.encode(StripeCrypto.blowfishKey(trackID: "3135556")) == "6c6c666b39662c37652575603c643439")
+    #expect(StripeCrypto.blowfishKey(trackID: "3135556") == Array("llfk9f,7e%u`<d49".utf8))
 }
 
 @Test(arguments: [

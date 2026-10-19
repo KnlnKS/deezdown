@@ -8,7 +8,7 @@ struct Deezdown: AsyncParsableCommand {
         commandName: "deezdown",
         abstract: "Download music from Deezer.",
         version: DeezDown.version,
-        subcommands: [Download.self, Search.self, Login.self, Config.self],
+        subcommands: [Download.self, Search.self, Login.self, Logout.self, Config.self],
         defaultSubcommand: Download.self
     )
 }
@@ -18,21 +18,22 @@ struct GlobalOptions: ParsableArguments {
     var portable = false
 
     var paths: AppPaths { AppPaths(portable: portable) }
-}
 
-extension AppPaths {
-    static func signIn(_ options: GlobalOptions, arl explicit: String?) async throws -> DeezerSession {
-        let credentials = CredentialStore(paths: options.paths)
+    /// Signs in with the ARL given, else the stored one, else one typed at the terminal. An ARL
+    /// that wasn't stored is remembered once it works.
+    func signIn(arl given: String?) async throws -> (DeezerSession, DeezerUser) {
+        let credentials = CredentialStore(paths: paths)
         let session = DeezerSession()
+        if given == nil, let stored = credentials.arl(), let user = try? await session.login(arl: stored) {
+            return (session, user)
+        }
+        let arl = try given ?? Self.typedARL()
+        let user = try await session.login(arl: arl)
+        try credentials.save(arl: arl)
+        return (session, user)
+    }
 
-        if let explicit {
-            try await session.login(arl: explicit)
-            try credentials.save(arl: explicit)
-            return session
-        }
-        if let stored = credentials.arl(), (try? await session.login(arl: stored)) != nil {
-            return session
-        }
+    private static func typedARL() throws -> String {
         guard isatty(FileHandle.standardInput.fileDescriptor) == 1 else {
             FileHandle.standardError.write(
                 Data(
@@ -46,9 +47,7 @@ extension AppPaths {
         guard let typed = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines), !typed.isEmpty else {
             throw ValidationError("No ARL entered.")
         }
-        try await session.login(arl: typed)
-        try credentials.save(arl: typed)
-        return session
+        return typed
     }
 }
 
@@ -61,10 +60,19 @@ struct Login: AsyncParsableCommand {
     var arl: String?
 
     func run() async throws {
-        let session = try await AppPaths.signIn(options, arl: arl)
-        guard let user = await session.user else { throw ExitCode.failure }
-        let plan = user.canStreamLossless ? "lossless" : (user.canStreamHQ ? "high quality" : "standard")
-        print("Signed in as \(user.name) (\(user.country), \(plan)).")
+        let (_, user) = try await options.signIn(arl: arl)
+        print("Signed in as \(user.name) (\(user.country), \(user.plan.lowercased())).")
+    }
+}
+
+struct Logout: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Forget the stored Deezer ARL.")
+
+    @OptionGroup var options: GlobalOptions
+
+    func run() {
+        CredentialStore(paths: options.paths).clear()
+        print("Signed out.")
     }
 }
 
@@ -103,8 +111,7 @@ struct Config: AsyncParsableCommand {
 
         func run() throws {
             let store = SettingsStore(paths: options.paths)
-            var configuration = try ConfigurationValue(store.load())
-            let settings = try configuration.setting(key, to: value)
+            let settings = try ConfigurationValue(store.load()).setting(key, to: value)
             try store.save(settings)
             print(try ConfigurationValue(settings).render(key: key))
         }
@@ -126,7 +133,7 @@ struct Download: AsyncParsableCommand {
 
     @OptionGroup var options: GlobalOptions
 
-    @Argument(help: "One or more Deezer links.")
+    @Argument(help: "One or more Deezer links, or files that list them.")
     var links: [String] = []
 
     @Option(name: [.short, .long], help: "Download into this folder instead of the configured one.")
@@ -162,21 +169,25 @@ struct Download: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let session = try await AppPaths.signIn(options, arl: arl)
+        let (session, _) = try await options.signIn(arl: arl)
         var settings = SettingsStore(paths: options.paths).load()
         if let path { settings.downloadLocation = URL(fileURLWithPath: path).standardizedFileURL.path }
         if let concurrency { settings.queueConcurrency = concurrency }
-        settings.repair()
 
         let format = bitrate.flatMap(TrackFormat.parse)
-        let engine = DownloadEngine(session: session, settings: settings, paths: options.paths)
+        let engine = DownloadEngine(session: session, settings: settings)
 
+        // As in deemix, a file stands for the links written in it.
+        let listed = try links.flatMap { argument in
+            FileManager.default.fileExists(atPath: argument)
+                ? LinkParser.split(try String(contentsOfFile: argument, encoding: .utf8)) : LinkParser.split(argument)
+        }
         var parsed: [DeezerLink] = []
-        for link in links.flatMap(LinkParser.split) {
-            do {
-                parsed.append(try await LinkParser.resolve(link))
-            } catch {
-                FileHandle.standardError.write(Data("Skipping \(link): \(reason(error))\n".utf8))
+        for (link, result) in zip(listed, await LinkParser.resolveAll(listed)) {
+            switch result {
+            case .success(let resolved): parsed.append(resolved)
+            case .failure(let error):
+                FileHandle.standardError.write(Data("Skipping \(link): \(error.localizedDescription)\n".utf8))
             }
         }
         guard try await engine.enqueue(parsed, format: format).count > 0 else { throw ExitCode.failure }
@@ -190,15 +201,5 @@ struct Download: AsyncParsableCommand {
         let queue = await engine.queue
         reporter.summarize(queue)
         if queue.contains(where: { $0.status == .failed }) { throw ExitCode.failure }
-    }
-
-    private func reason(_ error: any Error) -> String {
-        switch error {
-        case let failure as DownloadFailure: failure.message
-        case LinkParseError.notRecognized: "not a Deezer link"
-        case LinkParseError.notSupported: "that kind of Deezer link isn't supported"
-        case LinkParseError.invalidID(let id): "\"\(id)\" is not a valid id"
-        default: error.localizedDescription
-        }
     }
 }

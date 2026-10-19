@@ -7,15 +7,12 @@ import SwiftUI
 @Observable
 final class PreviewPlayer {
     private(set) var playingTrackID: String?
-    var volume: Double = 0.8 {
-        didSet { player.volume = Float(volume) }
-    }
 
     private let player = AVPlayer()
     private var endObserver: (any NSObjectProtocol)?
 
     init() {
-        player.volume = Float(volume)
+        player.volume = 0.8
     }
 
     func isPlaying(_ trackID: String) -> Bool { playingTrackID == trackID }

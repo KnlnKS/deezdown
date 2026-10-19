@@ -50,7 +50,8 @@ final class ProgressReporter {
         let failed = queue.reduce(0) { $0 + $1.failedTracks }
         var summary = "\nDownloaded \(tracks) track\(tracks == 1 ? "" : "s")"
         if failed > 0 { summary += ", \(failed) failed" }
-        if let destination = queue.compactMap(\.destination).first {
+        var seen = Set<URL>()
+        for destination in queue.compactMap(\.destination) where seen.insert(destination).inserted {
             summary += "\n\(destination.path(percentEncoded: false))"
         }
         print(summary)

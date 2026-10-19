@@ -37,6 +37,19 @@ private func path(_ url: URL) -> String {
 @Test func `illegal path characters are replaced and the name is normalised`() {
     #expect(NameSanitizer.fixName("AC/DC: Back?", replacer: "_") == "AC_DC_ Back_")
     #expect(NameSanitizer.fixName(#"a\b*c"d<e>f|g"#, replacer: "-") == "a-b-c-d-e-f-g")
+    #expect(NameSanitizer.fixName("AC/DC", replacer: "") == "ACDC")
+}
+
+@Test func `only a slash in the template itself makes a folder`() {
+    var settings = DownloadSettings()
+    settings.downloadLocation = "/Music"
+    settings.albumNameTemplate = "%year%/%album%"
+    settings.albumTracknameTemplate = "%album%: %title%"
+    var track = sampleTrack().applying(settings)
+    track.title = "Harder/Better"
+    let paths = PathBuilder(settings: settings).paths(for: track, context: DownloadContext())
+    #expect(path(paths.directory) == "/Music/2001/Discovery")
+    #expect(paths.filename == "Discovery_ Harder_Better")
 }
 
 @Test func `components that would vanish in finder fall back to a usable name`() {
@@ -86,7 +99,7 @@ private func path(_ url: URL) -> String {
     let track = sampleTrack(discs: 2).applying(settings)
     let paths = PathBuilder(settings: settings).paths(for: track, context: DownloadContext())
     #expect(paths.directory.lastPathComponent == "CD1")
-    #expect(paths.coverDirectory.lastPathComponent == "Daft Punk - Discovery")
+    #expect(paths.coverDirectory?.lastPathComponent == "Daft Punk - Discovery")
 }
 
 @Test func `a single track download uses the plain template and no album folder`() {
@@ -109,10 +122,8 @@ private func path(_ url: URL) -> String {
         .paths(for: track, context: DownloadContext(playlist: playlist))
     #expect(path(paths.directory) == "/Music/Road Trip")
     #expect(paths.filename == "Daft Punk - Harder, Better, Faster, Stronger")
-    #expect(
-        PathBuilder(settings: settings).trackVariables(track, DownloadContext(playlist: playlist))["position"]
-            == "007"
-    )
+    settings.playlistTracknameTemplate = "%position%"
+    #expect(PathBuilder(settings: settings).paths(for: track, context: DownloadContext(playlist: playlist)).filename == "007")
 }
 
 @Test func `explicit tracks can be marked in the filename`() {

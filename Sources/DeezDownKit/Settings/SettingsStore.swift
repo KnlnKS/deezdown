@@ -8,26 +8,37 @@ public struct SettingsStore: Sendable {
     }
 
     /// Never throws, and never discards settings it does understand: the stored file is merged
-    /// onto the defaults key by key, so an old or partial config keeps working.
+    /// onto the defaults, so an old or partial config keeps working. Should the merge not
+    /// decode, values are taken one at a time and only those this version cannot read are
+    /// dropped.
     public func load() -> DownloadSettings {
         var settings = DownloadSettings()
         if let stored = try? Data(contentsOf: paths.settingsFile),
             let overlay = try? JSONDecoder().decode(JSONValue.self, from: stored),
-            let defaults = try? JSONEncoder().encode(settings),
-            let base = try? JSONDecoder().decode(JSONValue.self, from: defaults),
-            let merged = try? JSONEncoder().encode(base.merging(overlay)),
-            let decoded = try? JSONDecoder().decode(DownloadSettings.self, from: merged)
+            let base = try? JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(settings))
         {
-            settings = decoded
+            if let decoded = Self.decode(base.merging(overlay)) {
+                settings = decoded
+            } else {
+                var tree = base
+                for leaf in overlay.leaves {
+                    let candidate = tree.merging(leaf)
+                    if let decoded = Self.decode(candidate) { (tree, settings) = (candidate, decoded) }
+                }
+            }
         }
         settings.repair()
         return settings
     }
 
+    private static func decode(_ tree: JSONValue) -> DownloadSettings? {
+        try? JSONDecoder().decode(DownloadSettings.self, from: JSONEncoder().encode(tree))
+    }
+
     public func save(_ settings: DownloadSettings) throws {
         var settings = settings
         settings.repair()
-        try paths.createDirectories()
+        try paths.createConfigDirectory()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(settings).write(to: paths.settingsFile, options: .atomic)
@@ -55,8 +66,15 @@ public struct CredentialStore: Sendable {
     }
 
     public func save(arl: String) throws {
-        try paths.createDirectories()
-        try JSONEncoder().encode(Login(arl: arl)).write(to: paths.loginFile, options: .atomic)
+        try paths.createConfigDirectory()
+        // The ARL signs in as the account and a portable config may sit anywhere, so the file
+        // is only its owner's before the ARL goes in, and replaces the old one whole.
+        let file = paths.loginFile.path(percentEncoded: false)
+        let staged = file + ".partial"
+        guard FileManager.default.createFile(atPath: staged, contents: nil, attributes: [.posixPermissions: 0o600])
+        else { throw CocoaError(.fileWriteUnknown) }
+        try JSONEncoder().encode(Login(arl: arl)).write(to: URL(fileURLWithPath: staged))
+        guard rename(staged, file) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
     }
 
     public func clear() {

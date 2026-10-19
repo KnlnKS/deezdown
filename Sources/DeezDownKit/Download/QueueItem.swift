@@ -10,10 +10,6 @@ public enum QueueStatus: String, Sendable, Codable, Equatable {
     public var isActive: Bool {
         self == .resolving || self == .downloading
     }
-
-    public var canPause: Bool {
-        self == .queued || self == .resolving || self == .downloading
-    }
 }
 
 public struct TrackIssue: Sendable, Codable, Equatable, Identifiable {
@@ -37,7 +33,7 @@ public struct QueueItem: Sendable, Codable, Equatable, Identifiable {
     public var progress: Double
     public var issues: [TrackIssue]
     public var destination: URL?
-    public var addedAt: Date
+    public var rootArtist: ArtistRef?
 
     public init(id: String, link: DeezerLink, title: String, subtitle: String, cover: Artwork, format: TrackFormat) {
         self.id = id
@@ -52,7 +48,6 @@ public struct QueueItem: Sendable, Codable, Equatable, Identifiable {
         failedTracks = 0
         progress = 0
         issues = []
-        addedAt = Date()
     }
 
     /// Bitrate is part of the identity, so the same album at two qualities is two queue entries.
@@ -61,6 +56,8 @@ public struct QueueItem: Sendable, Codable, Equatable, Identifiable {
     }
 
     public var canRetry: Bool { status == .withErrors || status == .failed || status == .canceled }
-    public var canPause: Bool { status.canPause }
+    public var canPause: Bool { status == .queued || status.isActive }
     public var canResume: Bool { status == .paused }
+    /// Finished with nothing to look into; failures stay until they are read.
+    public var canClear: Bool { status == .completed || status == .canceled }
 }

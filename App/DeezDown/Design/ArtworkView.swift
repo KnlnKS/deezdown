@@ -23,7 +23,7 @@ actor ArtworkLoader {
     private static let steps = [56, 120, 264, 500, 1000]
 
     static func step(for size: Int) -> Int {
-        Artwork.clamped(steps.first { $0 >= size } ?? Artwork.maximumSize)
+        steps.first { $0 >= size } ?? 1200
     }
 
     func image(for picture: Artwork, size: Int) async -> NSImage? {
