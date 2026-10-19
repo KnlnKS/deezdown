@@ -11,13 +11,8 @@ public struct ResolvedMedia: Sendable {
 public struct MediaResolver: Sendable {
     public static let batchLimit = 100
 
-    private let session: DeezerSession
-    private let settings: DownloadSettings
-
-    public init(session: DeezerSession, settings: DownloadSettings) {
-        self.session = session
-        self.settings = settings
-    }
+    let session: DeezerSession
+    let settings: DownloadSettings
 
     /// deemix's order: the preferred family from the requested quality down, then its
     /// catch-all MP3 for anything that offers one.

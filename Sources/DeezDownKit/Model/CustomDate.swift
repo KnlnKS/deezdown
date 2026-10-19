@@ -4,13 +4,9 @@ public struct CustomDate: Sendable, Equatable, Hashable {
     public var day: String
     public var month: String
     public var year: String
+}
 
-    public init(day: String, month: String, year: String) {
-        self.day = day
-        self.month = month
-        self.year = year
-    }
-
+extension CustomDate {
     public init?(deezerString: String?) {
         guard let deezerString, deezerString.count >= 4, !deezerString.hasPrefix("0000") else { return nil }
         let characters = Array(deezerString)

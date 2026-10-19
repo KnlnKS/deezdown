@@ -21,7 +21,7 @@ struct SearchScreen: View {
             .blendsWithToolbar()
         } else {
             TabbedPage(selection: $tab, options: Self.tabs.map { ($0, $0?.title ?? "All") }) {
-                SearchResults(query: query, tab: $tab).id(query)
+                QueryResults(query: query, tab: $tab).id(query)
             }
         }
     }
@@ -33,7 +33,7 @@ private let typingPause = Duration.milliseconds(220)
 
 /// One query's results. A new query gets a new view, so nothing still loading for the last one
 /// can land here.
-private struct SearchResults: View {
+private struct QueryResults: View {
     var query: String
     @Binding var tab: SearchKind?
 
@@ -47,11 +47,11 @@ private struct SearchResults: View {
         case nil: overview
         case .track:
             PagedResults(query: query, page: $tracks) { tracks in
-                ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
-                    TrackRow(track: track, index: index + 1, showsArtwork: true, showsAlbum: true)
+                ForEach(tracks) { track in
+                    TrackRow(track: track, showsArtwork: true, showsAlbum: true)
                         .padding(.vertical, 3)
                         .padding(.horizontal, Metrics.gutter)
-                        .hoverHighlight(corner: 6)
+                        .hoverHighlight()
                 }
             }
         case .album: PagedResults(query: query, page: $albums) { CardGrid(items: $0) { MediaCard($0) }.padding(Metrics.gutter) }
@@ -72,7 +72,7 @@ private struct SearchResults: View {
             } else {
                 ScreenScroll {
                     if !found.tracks.isEmpty {
-                        SectionHeader("Tracks") { PillButton(title: "View all") { tab = .track } }
+                        SectionHeader("Tracks") { viewAll(.track) }
                         VStack(spacing: 0) {
                             ForEach(found.tracks.prefix(5)) { track in
                                 TrackRow(track: track, showsArtwork: true, showsAlbum: true)
@@ -80,21 +80,16 @@ private struct SearchResults: View {
                             }
                         }
                     }
-                    if !found.artists.isEmpty {
-                        SectionHeader("Artists") { PillButton(title: "View all") { tab = .artist } }
-                        CardGrid(items: Array(found.artists.prefix(6))) { MediaCard($0) }
-                    }
-                    if !found.albums.isEmpty {
-                        SectionHeader("Albums") { PillButton(title: "View all") { tab = .album } }
-                        CardGrid(items: Array(found.albums.prefix(6))) { MediaCard($0) }
-                    }
-                    if !found.playlists.isEmpty {
-                        SectionHeader("Playlists") { PillButton(title: "View all") { tab = .playlist } }
-                        CardGrid(items: Array(found.playlists.prefix(6))) { MediaCard($0) }
-                    }
+                    CardShelf("Artists", items: found.artists) { MediaCard($0) } accessory: { viewAll(.artist) }
+                    CardShelf("Albums", items: found.albums) { MediaCard($0) } accessory: { viewAll(.album) }
+                    CardShelf("Playlists", items: found.playlists) { MediaCard($0) } accessory: { viewAll(.playlist) }
                 }
             }
         }
+    }
+
+    private func viewAll(_ kind: SearchKind) -> some View {
+        PillButton(title: "View all") { tab = kind }
     }
 }
 

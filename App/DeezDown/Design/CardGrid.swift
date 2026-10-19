@@ -35,61 +35,66 @@ struct CardGrid<Item: Identifiable, Card: View>: View {
     }
 }
 
-/// A titled shelf that shows a fixed number of rows and pages through the rest, the way
-/// Deezer's own home page does. Trimming to fit instead would put whatever did not fit out
-/// of reach, and narrowing the window would take more of it away.
-struct CardShelf<Item: Identifiable, Card: View>: View {
+/// A titled row that scrolls sideways and settles on whole cards, so none is left cut off at
+/// either edge. The chevrons scroll it a row's width at a time for a mouse without a sideways
+/// wheel. With nothing to show it shows nothing, title included.
+struct CardShelf<Item: Identifiable, Card: View, Accessory: View>: View {
     var title: String
     var items: [Item]
-    var rows: Int
     @ViewBuilder var card: (Item) -> Card
+    @ViewBuilder var accessory: () -> Accessory
 
-    @State private var page = 0
     @State private var available: CGFloat = 0
+    @State private var leading: Item.ID?
 
-    init(_ title: String, items: [Item], rows: Int = 1, @ViewBuilder card: @escaping (Item) -> Card) {
+    init(
+        _ title: String, items: [Item], @ViewBuilder card: @escaping (Item) -> Card,
+        @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }
+    ) {
         self.title = title
         self.items = items
-        self.rows = rows
         self.card = card
+        self.accessory = accessory
     }
 
-    private var pageSize: Int { CardColumns.fitting(available) * rows }
-    private var pageCount: Int { max(1, (items.count + pageSize - 1) / pageSize) }
-
-    private var shown: [Item] {
-        let start = min(page, pageCount - 1) * pageSize
-        return Array(items[start..<min(start + pageSize, items.count)])
-    }
+    private var columns: Int { CardColumns.fitting(available) }
+    private var first: Int { leading.flatMap { id in items.firstIndex { $0.id == id } } ?? 0 }
 
     var body: some View {
+        if !items.isEmpty { shelf }
+    }
+
+    private var shelf: some View {
         VStack(alignment: .leading, spacing: 16) {
             SectionHeader(title) {
-                if pageCount > 1 { PageArrows(page: $page, count: pageCount) }
+                HStack(spacing: 6) {
+                    accessory()
+                    if items.count > columns {
+                        arrow("chevron.left", "Show the previous cards", by: -1, enabled: first > 0)
+                        arrow("chevron.right", "Show the next cards", by: 1, enabled: first + columns < items.count)
+                    }
+                }
             }
-            CardGrid(items: shown) { card($0) }
-        }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { available = $0 }
-        // A narrower window fits fewer per page, which can leave the last page behind.
-        .onChange(of: pageCount) { _, count in page = min(page, count - 1) }
-        .animation(Motion.standard, value: page)
-    }
-}
-
-/// Deezer pages its home rows with a pair of chevrons; this is the Mac-weight version.
-private struct PageArrows: View {
-    @Binding var page: Int
-    var count: Int
-
-    var body: some View {
-        HStack(spacing: 6) {
-            arrow("chevron.left", "Show the previous row", to: page - 1, enabled: page > 0)
-            arrow("chevron.right", "Show the next row", to: page + 1, enabled: page < count - 1)
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: Metrics.cardGap) {
+                    ForEach(items) { item in
+                        card(item).containerRelativeFrame(.horizontal, count: columns, spacing: Metrics.cardGap)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollIndicators(.never)
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $leading, anchor: .leading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { available = $0 }
         }
     }
 
-    private func arrow(_ symbol: String, _ label: String, to destination: Int, enabled: Bool) -> some View {
-        Button { page = destination } label: {
+    private func arrow(_ symbol: String, _ label: String, by direction: Int, enabled: Bool) -> some View {
+        Button {
+            let target = min(max(0, first + direction * columns), items.count - columns)
+            withAnimation(Motion.standard) { leading = items[target].id }
+        } label: {
             Image(systemName: symbol)
                 .font(.caption.weight(.semibold))
         }

@@ -17,6 +17,9 @@ public actor DownloadEngine {
         var remaining: Int
         /// Playlist entries carry only an album's ID and title; deemix fetches the rest per track.
         var albums: [String: Task<Album?, Never>] = [:]
+        /// Tracks waiting for a worker, which go on waiting while the item is paused. A slice, so a
+        /// worker takes the next one without shifting a playlist's worth behind it.
+        var pending: ArraySlice<TrackJob> = []
     }
 
     private let session: DeezerSession
@@ -29,9 +32,6 @@ public actor DownloadEngine {
     private var items: [String: QueueItem] = [:]
     private var order: [String] = []
     private var states: [String: ItemState] = [:]
-    /// A slice, so a worker takes the next job without shifting a playlist's worth behind it.
-    private var jobs: ArraySlice<TrackJob> = []
-    private var heldJobs: [TrackJob] = []
     private var activeWorkers = 0
     private var directorRunning = false
     /// Each preparation of an item is a run. Cancelling, removing or retrying an item ends its
@@ -143,7 +143,7 @@ public actor DownloadEngine {
     }
 
     private func cancel(_ ids: Set<String>) {
-        let unfinished = ids.filter { items[$0].map { !$0.status.isFinished } ?? false }
+        let unfinished = ids.filter { items[$0]?.status.isFinished == false }
         guard !unfinished.isEmpty else { return }
         stopWork(for: unfinished)
         for id in unfinished { items[id]?.status = .canceled }
@@ -161,11 +161,9 @@ public actor DownloadEngine {
         discard(Set(order.filter { items[$0]?.canClear == true }))
     }
 
-    /// Drops queued and held tracks and aborts transfers in flight, so nothing more lands on
-    /// disk for these items.
+    /// Drops waiting tracks with the items' state and aborts transfers in flight, so nothing more
+    /// lands on disk for these items.
     private func stopWork(for ids: Set<String>) {
-        jobs.removeAll { ids.contains($0.itemID) }
-        heldJobs.removeAll { ids.contains($0.itemID) }
         for id in ids {
             runs[id] = nil
             states.removeValue(forKey: id)?.albums.values.forEach { $0.cancel() }
@@ -184,15 +182,28 @@ public actor DownloadEngine {
         publish()
     }
 
-    /// Pausing holds an item's remaining tracks aside; anything already in flight is allowed
-    /// to finish rather than throwing away a part-downloaded file.
     public func pause(_ id: String) {
-        guard var item = items[id], item.canPause else { return }
-        heldJobs.append(contentsOf: jobs.filter { $0.itemID == id })
-        jobs.removeAll { $0.itemID == id }
-        item.status = .paused
-        items[id] = item
-        persist([id])
+        pause(Set([id]))
+    }
+
+    public func pauseAll() {
+        pause(Set(order))
+    }
+
+    /// Pausing stops the tracks in flight too, which start over on resume: a whole album is often
+    /// in flight at once, so letting them finish would not pause it.
+    private func pause(_ ids: Set<String>) {
+        let pausable = ids.filter { items[$0]?.canPause == true }
+        guard !pausable.isEmpty else { return }
+        for id in pausable {
+            transfers[id]?.values.forEach { $0.cancel() }
+            states[id]?.inFlight.removeAll()
+            guard var item = items[id] else { continue }
+            item.status = .paused
+            item.progress = progress(for: id, item: item)
+            items[id] = item
+        }
+        persist(pausable)
         publish()
     }
 
@@ -207,13 +218,7 @@ public actor DownloadEngine {
     private func resume(_ ids: Set<String>) {
         let paused = ids.filter { items[$0]?.status == .paused }
         guard !paused.isEmpty else { return }
-        let released = heldJobs.filter { paused.contains($0.itemID) }
-        heldJobs.removeAll { paused.contains($0.itemID) }
-        jobs.append(contentsOf: released)
-        let holding = Set(released.map(\.itemID))
-        for id in paused {
-            items[id]?.status = states[id] == nil && !holding.contains(id) ? .queued : .downloading
-        }
+        for id in paused { items[id]?.status = states[id] == nil ? .queued : .downloading }
         persist(paused)
         publish()
         pump()
@@ -221,10 +226,8 @@ public actor DownloadEngine {
 
     public func retry(_ id: String) {
         guard var item = items[id], item.canRetry else { return }
-        heldJobs.removeAll { $0.itemID == id }
         item.reset(to: .queued)
         items[id] = item
-        states[id] = nil
         persist([id])
         publish()
         pump()
@@ -240,14 +243,14 @@ public actor DownloadEngine {
     private func startDirectorIfNeeded() {
         guard !directorRunning else { return }
         guard order.contains(where: { items[$0]?.status == .queued }) else { return }
-        guard jobs.count < settings.queueConcurrency * 4 else { return }
+        guard readyCount < settings.queueConcurrency * 4 else { return }
         directorRunning = true
         Task { await runDirector() }
     }
 
     private func runDirector() async {
         defer { directorRunning = false }
-        while jobs.count < settings.queueConcurrency * 4 {
+        while readyCount < settings.queueConcurrency * 4 {
             guard let id = order.first(where: { items[$0]?.status == .queued }) else { return }
             await prepare(id)
             startWorkersIfNeeded()
@@ -255,16 +258,31 @@ public actor DownloadEngine {
     }
 
     private func startWorkersIfNeeded() {
-        while activeWorkers < settings.queueConcurrency, !jobs.isEmpty {
+        let wanted = min(settings.queueConcurrency, activeWorkers + readyCount)
+        while activeWorkers < wanted {
             activeWorkers += 1
             Task { await runWorker() }
         }
     }
 
     private func runWorker() async {
-        while let job = jobs.popFirst() { await perform(job) }
+        while let job = nextJob() { await perform(job) }
         activeWorkers -= 1
         pump()
+    }
+
+    private var readyCount: Int {
+        order.reduce(0) { count, id in
+            items[id]?.status == .downloading ? count + (states[id]?.pending.count ?? 0) : count
+        }
+    }
+
+    /// The queue's order is the download order.
+    private func nextJob() -> TrackJob? {
+        for id in order where items[id]?.status == .downloading {
+            if let job = states[id]?.pending.popFirst() { return job }
+        }
+        return nil
     }
 
     // MARK: - Preparation
@@ -310,18 +328,19 @@ public actor DownloadEngine {
             if item.status != .paused { item.status = .downloading }
             items[id] = item
 
+            var pending: [TrackJob] = []
             for (index, outcome) in resolvedMedia.enumerated() {
                 switch outcome {
                 case .success(let media):
                     if media.track.searched {
                         states[id]?.extras.searched.append("\(media.track.mainArtist.name) - \(media.track.title)")
                     }
-                    let job = TrackJob(itemID: id, run: run, index: index, media: media)
-                    if items[id]?.status == .paused { heldJobs.append(job) } else { jobs.append(job) }
+                    pending.append(TrackJob(itemID: id, run: run, index: index, media: media))
                 case .failure(let failure):
                     record(id, index: index, failure: failure, track: collection.tracks[index].applying(settings))
                 }
             }
+            states[id]?.pending = pending[...]
             await finishIfDone(id)
         } catch {
             guard runs[id] == run else { return }
@@ -362,18 +381,26 @@ public actor DownloadEngine {
     private func isCurrent(_ job: TrackJob) -> Bool { runs[job.itemID] == job.run }
 
     private func perform(_ job: TrackJob) async {
-        guard isCurrent(job), let state = states[job.itemID] else { return }
+        // Only the context: a copy of the whole state held across the awaits below would make
+        // every track's bookkeeping copy the item's arrays instead of writing in place.
+        guard isCurrent(job), let context = states[job.itemID]?.context else { return }
         let media = job.media
         var track = media.track
-        if let pending = state.albums[track.album.id], let album = await pending.value { track.album = album }
+        if let pending = states[job.itemID]?.albums[track.album.id], let album = await pending.value {
+            track.album = album
+        }
         track = track.applying(settings)
 
         let builder = PathBuilder(settings: settings)
-        let namesBPM = track.bpm == 0 && builder.filenameTemplate(for: state.context).contains("%bpm%")
+        let namesBPM = track.bpm == 0 && builder.filenameTemplate(for: context).contains("%bpm%")
         if namesBPM { track.bpm = await session.publicTrackBPM(id: track.id) ?? 0 }
         guard isCurrent(job) else { return }
+        guard items[job.itemID]?.status != .paused else {
+            states[job.itemID]?.pending.append(job)
+            return
+        }
 
-        let destination = builder.paths(for: track, context: state.context)
+        let destination = builder.paths(for: track, context: context)
         let base = destination.directory.appending(path: destination.filename)
         let lrcFile = base.appendingPathExtension("lrc")
         let decision = OverwritePolicy.decide(
@@ -392,7 +419,7 @@ public actor DownloadEngine {
             guard isCurrent(job) else { return }
             if let found { try? LRCWriter.write(found, to: lrcFile, overwrite: false) }
             states[job.itemID]?.extras.noteArtwork(
-                for: track, at: destination, context: state.context, settings: settings)
+                for: track, at: destination, context: context, settings: settings)
             complete(job.itemID, index: job.index, file: existing)
             await finishIfDone(job.itemID)
             return
@@ -433,6 +460,11 @@ public actor DownloadEngine {
             guard isCurrent(job) else { return }
             transfers[job.itemID]?[job.index] = nil
             if case .failure(let error) = outcome {
+                // Only a pause cancels a transfer whose run is still current; the track waits for resume.
+                if error is CancellationError {
+                    states[job.itemID]?.pending.append(job)
+                    return
+                }
                 record(job.itemID, index: job.index, failure: DownloadFailure(error), track: track)
                 await finishIfDone(job.itemID)
                 return
@@ -461,7 +493,7 @@ public actor DownloadEngine {
             )
         }
 
-        states[job.itemID]?.extras.noteArtwork(for: track, at: destination, context: state.context, settings: settings)
+        states[job.itemID]?.extras.noteArtwork(for: track, at: destination, context: context, settings: settings)
         complete(job.itemID, index: job.index, file: file)
         await finishIfDone(job.itemID)
     }

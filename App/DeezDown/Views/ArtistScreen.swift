@@ -15,7 +15,7 @@ struct ArtistScreen: View {
                 if !detail.topTracks.isEmpty {
                     SectionHeader("Top tracks") {
                         PillButton(title: "Download") {
-                            Task { await model.enqueue(.artistTop(id)) }
+                            Task { await model.enqueue([.artistTop(id)]) }
                         }
                     }
                     VStack(spacing: 0) {
@@ -23,15 +23,11 @@ struct ArtistScreen: View {
                             TrackRow(track: track, index: index + 1, showsAlbum: true)
                                 .padding(.vertical, 3)
                                 .padding(.horizontal, 12)
-                                .hoverHighlight(corner: 6)
+                                .hoverHighlight()
                         }
                     }
                     .padding(.vertical, 6)
-                    .background(Color.raised, in: RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.06))
-                    }
+                    .raisedCard()
                 }
 
                 UnderlineTabs(selection: $tab, options: availableTabs(detail))

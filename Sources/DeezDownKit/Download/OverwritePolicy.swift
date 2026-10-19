@@ -16,6 +16,7 @@ enum OverwritePolicy {
         mode: OverwriteMode
     ) -> OverwriteDecision {
         let manager = FileManager.default
+        func exists(_ url: URL) -> Bool { manager.fileExists(atPath: url.path(percentEncoded: false)) }
         let target = base.appendingPathExtension(format.fileExtension)
 
         switch mode {
@@ -23,34 +24,29 @@ enum OverwritePolicy {
             return .download(target)
 
         case .skipAnyExtension:
-            for candidate in audioExtensions.map({ base.appendingPathExtension($0) })
-            where manager.fileExists(atPath: candidate.path(percentEncoded: false)) {
+            for candidate in audioExtensions.map({ base.appendingPathExtension($0) }) where exists(candidate) {
                 return .skip(candidate)
             }
             return .download(target)
 
         case .skip:
-            return manager.fileExists(atPath: target.path(percentEncoded: false))
-                ? .skip(target) : .download(target)
+            return exists(target) ? .skip(target) : .download(target)
 
         case .tagsOnly:
-            return manager.fileExists(atPath: target.path(percentEncoded: false))
-                ? .tagOnly(target) : .download(target)
+            return exists(target) ? .tagOnly(target) : .download(target)
 
         case .keepBoth:
-            guard manager.fileExists(atPath: target.path(percentEncoded: false)) else { return .download(target) }
+            guard exists(target) else { return .download(target) }
             for index in 1..<1000 {
                 let candidate = base.deletingLastPathComponent()
                     .appending(path: "\(base.lastPathComponent) (\(index))")
                     .appendingPathExtension(format.fileExtension)
-                if !manager.fileExists(atPath: candidate.path(percentEncoded: false)) {
-                    return .download(candidate)
-                }
+                if !exists(candidate) { return .download(candidate) }
             }
             return .download(target)
 
         case .upgradeBitrate:
-            guard manager.fileExists(atPath: target.path(percentEncoded: false)) else { return .download(target) }
+            guard exists(target) else { return .download(target) }
             guard format == .mp3_320, duration > 0,
                 let size = try? manager.attributesOfItem(atPath: target.path(percentEncoded: false))[.size]
                     as? Int

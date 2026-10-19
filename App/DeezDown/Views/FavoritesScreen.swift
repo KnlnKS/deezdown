@@ -13,7 +13,7 @@ struct FavoritesScreen: View {
             ToolbarItem {
                 if tab == .track, let lovedTracks = model.user?.lovedTracks {
                     Button("Download All", systemImage: "arrow.down.circle") {
-                        Task { await model.enqueue(lovedTracks) }
+                        Task { await model.enqueue([lovedTracks]) }
                     }
                     .help("Download every favorite track")
                 }
@@ -35,12 +35,12 @@ struct FavoritesScreen: View {
                 }
             case .track:
                 List {
-                    ForEach(Array(results.tracks.enumerated()), id: \.element.id) { index, track in
-                        TrackRow(track: track, index: index + 1, showsArtwork: true, showsAlbum: true)
+                    ForEach(results.tracks) { track in
+                        TrackRow(track: track, showsArtwork: true, showsAlbum: true)
                             .trackRowInsets()
                     }
                 }
-                .listStyle(.inset)
+                .trackListStyle()
             case .album: ScreenScroll { CardGrid(items: results.albums) { MediaCard($0) } }
             case .artist: ScreenScroll { CardGrid(items: results.artists) { MediaCard($0) } }
             case .playlist: ScreenScroll { CardGrid(items: results.playlists) { MediaCard($0) } }

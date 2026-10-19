@@ -90,7 +90,7 @@ extension DeezerSession {
         let results = try await gateway(
             "search.music",
             [
-                "query": .string(query), "filter": "ALL", "output": .string(kind.gatewayOutput),
+                "query": .string(query), "filter": "ALL", "output": .string(kind.rawValue.uppercased()),
                 "start": .int(start), "nb": .int(limit),
             ]
         )
@@ -128,15 +128,6 @@ extension DeezerSession {
 
 public enum SearchKind: String, Sendable, CaseIterable {
     case track, album, artist, playlist
-
-    var gatewayOutput: String {
-        switch self {
-        case .track: "TRACK"
-        case .album: "ALBUM"
-        case .artist: "ARTIST"
-        case .playlist: "PLAYLIST"
-        }
-    }
 
     public var title: String {
         switch self {

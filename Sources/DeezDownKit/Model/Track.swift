@@ -80,6 +80,7 @@ public struct Track: Sendable, Equatable {
             id: gateway["ALB_ID"].stringValue ?? "0",
             title: gateway["ALB_TITLE"].stringValue ?? "",
             mainArtist: main,
+            artists: [main.name],
             cover: Artwork(md5: gateway["ALB_PICTURE"].stringValue ?? "", kind: .cover)
         )
         self.playlist = playlist

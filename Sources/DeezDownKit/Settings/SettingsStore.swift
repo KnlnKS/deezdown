@@ -3,7 +3,7 @@ import Foundation
 public struct SettingsStore: Sendable {
     public let paths: AppPaths
 
-    public init(paths: AppPaths = AppPaths()) {
+    public init(paths: AppPaths) {
         self.paths = paths
     }
 
@@ -63,7 +63,7 @@ public struct CredentialStore: Sendable {
 
     public let paths: AppPaths
 
-    public init(paths: AppPaths = AppPaths()) {
+    public init(paths: AppPaths) {
         self.paths = paths
     }
 

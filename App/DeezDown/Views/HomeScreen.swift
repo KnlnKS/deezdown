@@ -8,26 +8,11 @@ struct HomeScreen: View {
         Fetched("home", refreshable: true) { try await $0.home() } content: { feed in
             ScreenScroll {
                 greeting
-
-                if !feed.history.isEmpty {
-                    CardShelf("Last Streamed by You", items: feed.history, rows: 2) { MediaCard($0) }
-                }
-
-                if !feed.playlists.isEmpty {
-                    CardShelf("Your Playlists", items: feed.playlists) { MediaCard($0) }
-                }
-
-                if !feed.artists.isEmpty {
-                    CardShelf("Artists You Follow", items: feed.artists) { MediaCard($0) }
-                }
-
-                if !feed.topAlbums.isEmpty {
-                    CardShelf("Most Streamed Albums", items: feed.topAlbums, rows: 2) { MediaCard($0) }
-                }
-
-                if !feed.topPlaylists.isEmpty {
-                    CardShelf("Popular Playlists", items: feed.topPlaylists) { MediaCard($0, subtitle: $0.owner) }
-                }
+                CardShelf("Last Streamed by You", items: feed.history) { MediaCard($0) }
+                CardShelf("Your Playlists", items: feed.playlists) { MediaCard($0) }
+                CardShelf("Artists You Follow", items: feed.artists) { MediaCard($0) }
+                CardShelf("Most Streamed Albums", items: feed.topAlbums) { MediaCard($0) }
+                CardShelf("Popular Playlists", items: feed.topPlaylists) { MediaCard($0, subtitle: $0.owner) }
             }
         }
     }

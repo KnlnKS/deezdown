@@ -2,15 +2,9 @@ import Foundation
 import Testing
 @testable import DeezDownKit
 
-private func sandboxPaths() throws -> AppPaths {
-    let root = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "deezdown-cfg-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    return AppPaths(configDirectory: root)
-}
-
 @Test func `a partial or partly unreadable config keeps every value it can read`() throws {
-    let paths = try sandboxPaths()
-    defer { try? FileManager.default.removeItem(at: paths.configDirectory) }
+    let sandbox = try Sandbox()
+    let paths = AppPaths(configDirectory: sandbox.root)
 
     // deemix stores numbers as strings; an unknown choice must cost only itself.
     try Data(#"{"maxBitrate":"1","queueConcurrency":3,"overwriteFile":"?","tags":{"lyrics":true}}"#.utf8)
@@ -27,15 +21,15 @@ private func sandboxPaths() throws -> AppPaths {
 }
 
 @Test func `a corrupt config falls back to defaults instead of failing`() throws {
-    let paths = try sandboxPaths()
-    defer { try? FileManager.default.removeItem(at: paths.configDirectory) }
+    let sandbox = try Sandbox()
+    let paths = AppPaths(configDirectory: sandbox.root)
     try Data("{ not json".utf8).write(to: paths.settingsFile)
     #expect(SettingsStore(paths: paths).load().maxBitrate == DownloadSettings().maxBitrate)
 }
 
 @Test func `settings survive a save and reload round trip`() throws {
-    let paths = try sandboxPaths()
-    defer { try? FileManager.default.removeItem(at: paths.configDirectory) }
+    let sandbox = try Sandbox()
+    let paths = AppPaths(configDirectory: sandbox.root)
 
     var settings = DownloadSettings()
     settings.maxBitrate = .mp3_320

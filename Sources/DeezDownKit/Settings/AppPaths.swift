@@ -7,6 +7,12 @@ public struct AppPaths: Sendable {
     public var loginFile: URL { configDirectory.appending(path: "login.json") }
     public var queueDirectory: URL { configDirectory.appending(path: "queue") }
 
+    public func createConfigDirectory() throws {
+        try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
+    }
+}
+
+extension AppPaths {
     public init(portable: Bool = false) {
         if portable {
             configDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -18,13 +24,5 @@ public struct AppPaths: Sendable {
             configDirectory = (support ?? URL(fileURLWithPath: NSHomeDirectory()))
                 .appending(path: "deezdown")
         }
-    }
-
-    public init(configDirectory: URL) {
-        self.configDirectory = configDirectory
-    }
-
-    public func createConfigDirectory() throws {
-        try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
     }
 }

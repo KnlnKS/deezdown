@@ -2,16 +2,10 @@ import Foundation
 import Testing
 @testable import DeezDownKit
 
-private func sampleTrack(explicit: Bool = false, featured: Bool = true, discs: Int = 1) -> Track {
-    var artists: [JSONValue] = [
-        .object(["ART_ID": "27", "ART_NAME": "Daft Punk", "ROLE_ID": 0, "ART_PICTURE": "abc"])
-    ]
-    if featured {
-        artists.append(.object(["ART_ID": "99", "ART_NAME": "Pharrell", "ROLE_ID": 5, "ART_PICTURE": "def"]))
-    }
+private func sampleTrack(explicit: Bool = false, discs: Int = 1) -> Track {
     let album = Album(
         id: "302127", title: "Discovery",
-        mainArtist: ArtistRef(id: "27", name: "Daft Punk"),
+        mainArtist: ArtistRef(id: "27", name: "Daft Punk"), artists: ["Daft Punk"],
         genres: ["Electro"], label: "Daft Life Ltd.", barcode: "724384960650",
         date: CustomDate(deezerString: "2001-03-12"), trackTotal: 14, discTotal: discs
     )
@@ -19,8 +13,11 @@ private func sampleTrack(explicit: Bool = false, featured: Bool = true, discs: I
         gateway: .object([
             "SNG_ID": "3135556", "SNG_TITLE": "Harder, Better, Faster, Stronger",
             "DURATION": "226", "TRACK_NUMBER": "4", "DISK_NUMBER": "1", "ISRC": "GBDUW0000059",
-            "MD5_ORIGIN": "000790eceb6cb6732d225c0585632b31", "MEDIA_VERSION": "3",
-            "ARTISTS": .array(artists),
+            "MD5_ORIGIN": "000790eceb6cb6732d225c0585632b31",
+            "ARTISTS": .array([
+                .object(["ART_ID": "27", "ART_NAME": "Daft Punk", "ROLE_ID": 0, "ART_PICTURE": "abc"]),
+                .object(["ART_ID": "99", "ART_NAME": "Pharrell", "ROLE_ID": 5, "ART_PICTURE": "def"]),
+            ]),
             "EXPLICIT_TRACK_CONTENT": .object(["EXPLICIT_LYRICS_STATUS": explicit ? 1 : 0]),
             "PHYSICAL_RELEASE_DATE": "2001-03-12",
         ]),

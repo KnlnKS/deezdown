@@ -1,5 +1,4 @@
 import DeezDownKit
-import Observation
 import SwiftUI
 
 struct Toast: Identifiable {
@@ -12,18 +11,20 @@ struct Toast: Identifiable {
 /// What the sidebar, menus and toolbar show about the queue. Progress changes the queue many
 /// times a second but this rarely, so views that need only this don't redraw on every tick.
 struct QueueSummary: Equatable {
+    var isEmpty = true
     var active = 0
-    var paused = 0
+    var canPause = false
+    var canResume = false
     var canRetry = false
     var canClear = false
 
     init(_ queue: [QueueItem] = []) {
-        for item in queue {
-            if !item.status.isFinished { active += 1 }
-            if item.status == .paused { paused += 1 }
-            canRetry = canRetry || item.canRetry
-            canClear = canClear || item.canClear
-        }
+        isEmpty = queue.isEmpty
+        active = queue.count { !$0.status.isFinished }
+        canPause = queue.contains(where: \.canPause)
+        canResume = queue.contains(where: \.canResume)
+        canRetry = queue.contains(where: \.canRetry)
+        canClear = queue.contains(where: \.canClear)
     }
 }
 
@@ -44,7 +45,7 @@ final class AppModel {
     /// A menu command on its way to the window that can act on it. The id makes pressing
     /// the same shortcut twice two separate events.
     struct Command: Equatable {
-        enum Kind { case addLink, findInSearch, showDownloads }
+        enum Kind { case findInSearch, showDownloads }
         var kind: Kind
         var id = UUID()
     }
@@ -59,7 +60,7 @@ final class AppModel {
     }
     private(set) var summary = QueueSummary()
     var toast: Toast?
-    var isRestoring = true
+    private(set) var isRestoring = true
 
     let session = DeezerSession()
     let player = PreviewPlayer()
@@ -76,6 +77,12 @@ final class AppModel {
         credentials = CredentialStore(paths: paths)
         settingsStore = SettingsStore(paths: paths)
         settings = settingsStore.load()
+        // Here rather than when a window appears: a window reopened from the Dock would sign in
+        // again and start a second engine on the same queue.
+        Task {
+            if let stored = credentials.arl() { await signIn(arl: stored, remember: false) }
+            isRestoring = false
+        }
     }
 
     var library: DeezerLibrary { DeezerLibrary(session: session) }
@@ -84,17 +91,7 @@ final class AppModel {
 
     // MARK: - Session
 
-    func restore() async {
-        defer { isRestoring = false }
-        guard let stored = credentials.arl() else { return }
-        await attemptSignIn(arl: stored, remember: false)
-    }
-
-    func signIn(arl: String) async {
-        await attemptSignIn(arl: arl, remember: true)
-    }
-
-    private func attemptSignIn(arl: String, remember: Bool) async {
+    func signIn(arl: String, remember: Bool = true) async {
         signInState = .signingIn
         do {
             let user = try await session.login(arl: arl)
@@ -155,20 +152,16 @@ final class AppModel {
 
     // MARK: - Queue
 
-    func enqueue(_ link: DeezerLink) async {
-        await enqueue([link])
-    }
-
     /// A selection is queued in one go: one round trip, and one message rather than one
     /// per track.
-    func enqueue(_ links: [DeezerLink], format: TrackFormat? = nil) async {
+    func enqueue(_ links: [DeezerLink]) async {
         guard !links.isEmpty else { return }
         guard let engine else {
             show(Toast(message: "Sign in to download", kind: .failure))
             return
         }
         do {
-            let added = try await engine.enqueue(links, format: format)
+            let added = try await engine.enqueue(links)
             if added.isEmpty {
                 show(Toast(message: "Already in the queue"))
             } else {
@@ -179,9 +172,9 @@ final class AppModel {
         }
     }
 
-    func enqueue(pasted text: String, format: TrackFormat? = nil) async {
+    func enqueue(pasted text: String) async {
         let results = await LinkParser.resolveAll(LinkParser.split(text))
-        await enqueue(results.compactMap { try? $0.get() }, format: format)
+        await enqueue(results.compactMap { try? $0.get() })
         // Shown last, so a link that was not understood is not hidden behind "Added".
         let failures = results.compactMap { result -> String? in
             guard case .failure(let error) = result else { return nil }
@@ -197,6 +190,7 @@ final class AppModel {
     func cancel(_ id: String) { Task { await engine?.cancel(id) } }
     func remove(_ id: String) { Task { await engine?.remove(id) } }
     func retry(_ id: String) { Task { await engine?.retry(id) } }
+    func pauseAll() { Task { await engine?.pauseAll() } }
     func cancelAll() { Task { await engine?.cancelAll() } }
     func resumeAll() { Task { await engine?.resumeAll() } }
     func clearFinished() { Task { await engine?.clearFinished() } }

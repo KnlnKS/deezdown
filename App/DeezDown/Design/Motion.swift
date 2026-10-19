@@ -9,18 +9,17 @@ enum Motion {
 
 extension View {
     /// Presses read as instant because the scale lands on pointer-down, not on release.
-    func pressable(scale: CGFloat = 0.97) -> some View {
-        buttonStyle(PressableButtonStyle(scale: scale))
+    func pressable() -> some View {
+        buttonStyle(PressableButtonStyle())
     }
 }
 
 struct PressableButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var scale: CGFloat
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? scale : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.9 : 1)
             .opacity(configuration.isPressed ? 0.85 : 1)
             .animation(Motion.quick, value: configuration.isPressed)
     }
@@ -29,12 +28,11 @@ struct PressableButtonStyle: ButtonStyle {
 struct HoverHighlight: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
-    var corner: CGFloat = Metrics.cornerRadius
 
     func body(content: Content) -> some View {
         content
             .background {
-                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(Color.primary.opacity(hovering ? 0.06 : 0))
             }
             .onHover { hovering = $0 }
@@ -43,7 +41,7 @@ struct HoverHighlight: ViewModifier {
 }
 
 extension View {
-    func hoverHighlight(corner: CGFloat = Metrics.cornerRadius) -> some View {
-        modifier(HoverHighlight(corner: corner))
+    func hoverHighlight() -> some View {
+        modifier(HoverHighlight())
     }
 }

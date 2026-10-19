@@ -39,38 +39,19 @@ public struct Album: Sendable, Equatable {
     public var title: String
     public var mainArtist: ArtistRef
     public var artists: [String]
-    public var cover: Artwork
-    public var genres: [String]
-    public var label: String
-    public var barcode: String
-    public var recordType: RecordType
+    public var cover = Artwork(md5: "", kind: .cover)
+    public var genres: [String] = []
+    public var label = "Unknown"
+    public var barcode = "Unknown"
+    public var recordType = RecordType.album
     public var date: CustomDate?
-    public var trackTotal: Int
-    public var discTotal: Int
-    public var explicit: Bool
+    public var trackTotal = 0
+    public var discTotal = 1
+    public var explicit = false
     public var isPlaylistCompilation = false
+}
 
-    public init(
-        id: String, title: String, mainArtist: ArtistRef,
-        cover: Artwork = Artwork(md5: "", kind: .cover), genres: [String] = [],
-        label: String = "Unknown", barcode: String = "Unknown",
-        date: CustomDate? = nil, trackTotal: Int = 0, discTotal: Int = 1
-    ) {
-        self.id = id
-        self.title = title
-        self.mainArtist = mainArtist
-        artists = [mainArtist.name]
-        self.cover = cover
-        self.genres = genres
-        self.label = label
-        self.barcode = barcode
-        recordType = .album
-        self.date = date
-        self.trackTotal = trackTotal
-        self.discTotal = discTotal
-        explicit = false
-    }
-
+extension Album {
     init(gateway: JSONValue, publicData: JSONValue = .null) {
         // As in deemix, the album's artists come from the public API: the gateway's album data
         // names its main artist without a picture and lists no others.
@@ -115,7 +96,7 @@ public struct Album: Sendable, Equatable {
         isPlaylistCompilation = true
         id = "pl_\(playlist.id)"
         title = playlist.title
-        mainArtist = ArtistRef(id: ArtistRef.variousArtistsID, name: "Various Artists", role: .main)
+        mainArtist = ArtistRef(id: ArtistRef.variousArtistsID, name: "Various Artists")
         artists = [mainArtist.name]
         cover = playlist.picture
         label = ""

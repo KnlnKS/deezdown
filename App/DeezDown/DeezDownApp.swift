@@ -10,9 +10,10 @@ struct DeezDownApp: App {
             RootView()
                 .environment(model)
                 .frame(minWidth: 900, minHeight: 560)
-                .task { await model.restore() }
         }
         .defaultSize(width: 1160, height: 760)
+        // Menu commands reach every window through the shared model, so there is only one.
+        .commandsRemoved()
         .windowToolbarStyle(.unified)
         .commands {
             CommandGroup(after: .textEditing) {
@@ -21,12 +22,6 @@ struct DeezDownApp: App {
             }
             SidebarCommands()
             DownloadCommands(model: model)
-            // Replacing New Item with an empty group makes SwiftUI treat the File menu as
-            // trivial and trap while pruning it, so it carries a real command instead.
-            CommandGroup(replacing: .newItem) {
-                Button("Add Link…") { model.send(.addLink) }
-                    .keyboardShortcut("l", modifiers: .command)
-            }
             CommandGroup(replacing: .help) {
                 Link("Deezer", destination: URL(string: "https://www.deezer.com")!)
             }
@@ -44,13 +39,6 @@ struct DownloadCommands: Commands {
 
     var body: some Commands {
         CommandMenu("Downloads") {
-            // Plain paste belongs to text fields, so queueing a copied link gets its own shortcut.
-            Button("Paste and Queue") {
-                guard let text = NSPasteboard.general.string(forType: .string) else { return }
-                Task { await model.enqueue(pasted: text) }
-            }
-            .keyboardShortcut("v", modifiers: [.command, .shift])
-
             Button("Show Downloads") { model.send(.showDownloads) }
             .keyboardShortcut("d", modifiers: [.command, .shift])
 
@@ -74,6 +62,12 @@ struct DownloadCommands: Commands {
             Button("Clear Finished") { model.clearFinished() }
                 .keyboardShortcut(.delete, modifiers: [.command, .shift])
                 .disabled(!model.summary.canClear)
+
+            Button("Pause All") { model.pauseAll() }
+                .disabled(!model.summary.canPause)
+
+            Button("Resume All") { model.resumeAll() }
+                .disabled(!model.summary.canResume)
 
             Button("Cancel All") { model.cancelAll() }
                 .disabled(model.summary.active == 0)

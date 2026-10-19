@@ -6,21 +6,20 @@ import Testing
 @Suite(.live, .serialized)
 final class LiveEngine {
     let session = DeezerSession()
-    let root = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "deezdown-engine-\(UUID().uuidString)")
-    var music: URL { root.appending(path: "music") }
+    let sandbox: Sandbox
+    var music: URL { sandbox.root.appending(path: "music") }
     var settings = DownloadSettings()
 
     init() throws {
+        sandbox = try Sandbox()
         try FileManager.default.createDirectory(at: music, withIntermediateDirectories: true)
         settings.downloadLocation = music.path(percentEncoded: false)
     }
 
-    deinit { try? FileManager.default.removeItem(at: root) }
-
     /// Engines a test makes share one session and one queue folder.
     private func engine() async throws -> DownloadEngine {
         if await session.user == nil { try await session.login(arl: #require(liveARL)) }
-        let paths = AppPaths(configDirectory: root.appending(path: "config"))
+        let paths = AppPaths(configDirectory: sandbox.root.appending(path: "config"))
         return DownloadEngine(session: session, settings: settings, queueDirectory: paths.queueDirectory)
     }
 

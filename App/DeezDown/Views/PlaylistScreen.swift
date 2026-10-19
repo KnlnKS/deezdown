@@ -7,8 +7,8 @@ struct PlaylistScreen: View {
     var body: some View {
         Fetched("playlist-\(id)") { try await $0.playlist(id: id) } content: { detail in
             TrackList(tracks: detail.tracks) {
-                ForEach(Array(detail.tracks.enumerated()), id: \.element.id) { index, track in
-                    TrackRow(track: track, index: index + 1, showsArtwork: true, showsAlbum: true).tag(track.id)
+                ForEach(detail.tracks) { track in
+                    TrackRow(track: track, showsArtwork: true, showsAlbum: true).tag(track.id)
                 }
             } header: {
                 header(detail)
@@ -32,10 +32,7 @@ struct PlaylistScreen: View {
     }
 
     private func metadata(_ detail: PlaylistDetail) -> String {
-        var parts: [String] = []
-        if !detail.summary.owner.isEmpty { parts.append("By \(detail.summary.owner)") }
-        parts.append("\(detail.tracks.count) track\(detail.tracks.count == 1 ? "" : "s")")
-        parts.append(detail.duration.formattedDuration)
-        return parts.joined(separator: " • ")
+        let owner = detail.summary.owner.isEmpty ? [] : ["By \(detail.summary.owner)"]
+        return (owner + [detail.tracks.count.tracksLabel, detail.duration.formattedDuration]).joined(separator: " • ")
     }
 }

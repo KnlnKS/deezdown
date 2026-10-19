@@ -107,8 +107,6 @@ public struct TagSettings: Sendable, Codable, Equatable {
     public var multiArtistSeparator = ArtistSeparator.standard
     public var singleAlbumArtist = false
     public var coverDescriptionUTF8 = false
-
-    public init() {}
 }
 
 public struct DownloadSettings: Sendable, Codable, Equatable {

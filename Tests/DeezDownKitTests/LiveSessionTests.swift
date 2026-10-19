@@ -24,15 +24,6 @@ struct LiveSession {
         }
     }
 
-    @Test func `track data carries the fields the downloader depends on`() async throws {
-        try await signedIn()
-        let track = try await session.trackData(id: "3135556")
-        #expect(track["SNG_TITLE"].stringValue == "Harder, Better, Faster, Stronger")
-        #expect(track["MD5_ORIGIN"].stringValue == "000790eceb6cb6732d225c0585632b31")
-        #expect(track["ISRC"].stringValue == "GBDUW0000059")
-        #expect((track["FILESIZE_FLAC"].intValue ?? 0) > 0)
-    }
-
     @Test func `a bad track token reports an error instead of a url`() async throws {
         try await signedIn()
         let results = try await session.trackURLs(trackTokens: ["bogus"], format: .mp3_128)

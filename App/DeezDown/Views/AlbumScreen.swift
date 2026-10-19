@@ -62,19 +62,16 @@ struct AlbumScreen: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
-            .hoverHighlight(corner: 6)
+            .hoverHighlight()
 
             Text(metadata(detail))
         }
     }
 
     private func metadata(_ detail: AlbumDetail) -> String {
-        var parts: [String] = []
-        if !detail.summary.year.isEmpty { parts.append(detail.summary.year) }
-        parts.append("\(detail.tracks.count) track\(detail.tracks.count == 1 ? "" : "s")")
-        parts.append(detail.duration.formattedDuration)
-        if let genre = detail.genres.first { parts.append(genre) }
-        if !detail.label.isEmpty { parts.append(detail.label) }
-        return parts.joined(separator: " • ")
+        [
+            detail.summary.year, detail.tracks.count.tracksLabel, detail.duration.formattedDuration,
+            detail.genres.first ?? "", detail.label,
+        ].filter { !$0.isEmpty }.joined(separator: " • ")
     }
 }

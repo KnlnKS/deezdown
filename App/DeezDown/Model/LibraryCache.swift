@@ -12,7 +12,7 @@ final class LibraryCache {
 
     private var entries: [String: Entry] = [:]
 
-    func value<Value>(_ key: String, as type: Value.Type = Value.self) -> Value? {
+    func value<Value>(_ key: String, as type: Value.Type) -> Value? {
         guard let entry = entries[key], ContinuousClock.now - entry.storedAt < Self.lifetime else {
             return nil
         }

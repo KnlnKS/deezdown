@@ -48,7 +48,7 @@ struct TrackRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 44, alignment: .trailing)
 
-            Button("Download", systemImage: "arrow.down.circle") { Task { await model.enqueue(track.link) } }
+            Button("Download", systemImage: "arrow.down.circle") { Task { await model.enqueue([track.link]) } }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
                 .contentShape(.rect)
@@ -105,7 +105,7 @@ struct TrackRow: View {
                 }
             }
             .buttonStyle(.plain)
-            .pressable(scale: 0.9)
+            .pressable()
             .frame(width: size, height: size)
             .help(isPlaying ? "Stop preview" : "Play a 30 second preview")
         }
@@ -119,6 +119,11 @@ extension View {
         listRowInsets(
             EdgeInsets(top: 0, leading: Metrics.listGutter, bottom: 0, trailing: Metrics.listGutter)
         )
+    }
+
+    /// A list draws the table's grey under its rows; the page's own ground shows instead.
+    func trackListStyle() -> some View {
+        listStyle(.inset).scrollContentBackground(.hidden)
     }
 }
 
@@ -143,7 +148,7 @@ struct TrackList<Header: View, Rows: View>: View {
                         .foregroundStyle(.primary)
                 }
             }
-            .listStyle(.inset)
+            .trackListStyle()
             SelectionFooter(tracks: tracks, selection: selection)
         }
         .animation(Motion.standard, value: selection.isEmpty)

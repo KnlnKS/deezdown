@@ -10,7 +10,7 @@ struct CardDownloadButton: View {
 
     var body: some View {
         Button {
-            Task { await model.enqueue(link) }
+            Task { await model.enqueue([link]) }
         } label: {
             Image(systemName: "arrow.down")
                 .font(.system(size: 16, weight: .bold))
@@ -20,7 +20,7 @@ struct CardDownloadButton: View {
                 .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
         }
         .buttonStyle(.plain)
-        .pressable(scale: 0.9)
+        .pressable()
         .opacity(isVisible ? 1 : 0)
         .scaleEffect(isVisible || reduceMotion ? 1 : 0.6)
         .help("Download")
@@ -48,7 +48,7 @@ struct DownloadContextMenu: ViewModifier {
 
     func body(content: Content) -> some View {
         content.contextMenu {
-            Button("Download") { Task { await model.enqueue(link) } }
+            Button("Download") { Task { await model.enqueue([link]) } }
             if let track {
                 Divider()
                 destination("Go to Artist", .artist(track.artistID))
@@ -125,7 +125,6 @@ struct MediaCard: View {
 
     @State private var hovering = false
 
-    @ViewBuilder
     var body: some View {
         if let route = Route(link: link) {
             NavigationLink(value: route) { card }
@@ -174,18 +173,19 @@ extension MediaCard {
     init(_ playlist: PlaylistSummary, title: String? = nil, subtitle: String? = nil) {
         self.init(
             picture: playlist.picture, title: title ?? playlist.title,
-            subtitle: subtitle ?? "\(playlist.trackCount) tracks", link: playlist.link
+            subtitle: subtitle ?? playlist.trackCount.tracksLabel, link: playlist.link
         )
     }
 }
 
+/// Reads the toast itself, so one coming and going redraws only this.
 struct ToastView: View {
-    var toast: Toast?
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         // The animation sits outside the condition so the toast's arrival and exit animate too.
         ZStack {
-            if let toast {
+            if let toast = model.toast {
                 Label(toast.message, systemImage: symbol(toast.kind))
                     .font(.callout)
                     .padding(.horizontal, 14)
@@ -198,7 +198,7 @@ struct ToastView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(Motion.momentum, value: toast?.id)
+        .animation(Motion.momentum, value: model.toast?.id)
     }
 
     private func symbol(_ kind: Toast.Kind) -> String {
@@ -227,6 +227,8 @@ extension Int {
         }
         return String(format: "%d:%02d", minutes, seconds)
     }
+
+    var tracksLabel: String { "\(self) track\(self == 1 ? "" : "s")" }
 }
 
 /// Deezer puts a pill next to each section heading; this is the Mac-weight version.
@@ -281,7 +283,7 @@ struct DetailHeader<Details: View>: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
-                Button(download, systemImage: "arrow.down.circle.fill") { Task { await model.enqueue(link) } }
+                Button(download, systemImage: "arrow.down.circle.fill") { Task { await model.enqueue([link]) } }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .fixedSize()
@@ -353,5 +355,10 @@ extension View {
     /// page whose top stays put drops it to match the pages that scroll.
     func blendsWithToolbar() -> some View {
         toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+    }
+
+    func raisedCard() -> some View {
+        let shape = RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous)
+        return background(Color.raised, in: shape).overlay { shape.strokeBorder(Color.primary.opacity(0.06)) }
     }
 }

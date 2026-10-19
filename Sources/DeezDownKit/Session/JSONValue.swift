@@ -13,20 +13,22 @@ public enum JSONValue: Sendable, Equatable {
 extension JSONValue: Codable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
+        // Most of Deezer's values are strings or objects, and every type tried before the right
+        // one throws an error that is built and thrown away.
         if container.decodeNil() {
             self = .null
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([String: JSONValue].self) {
+            self = .object(value)
         } else if let value = try? container.decode(Bool.self) {
             self = .bool(value)
         } else if let value = try? container.decode(Int.self) {
             self = .int(value)
         } else if let value = try? container.decode(Double.self) {
             self = .double(value)
-        } else if let value = try? container.decode(String.self) {
-            self = .string(value)
-        } else if let value = try? container.decode([JSONValue].self) {
-            self = .array(value)
         } else {
-            self = .object(try container.decode([String: JSONValue].self))
+            self = .array(try container.decode([JSONValue].self))
         }
     }
 

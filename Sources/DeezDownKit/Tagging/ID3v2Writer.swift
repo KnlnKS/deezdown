@@ -18,13 +18,13 @@ struct ID3v2Writer {
 
     static let unicodeTerminator: [UInt8] = [0x00, 0x00]
 
-    mutating func addText(_ identifier: String, _ value: String?) {
-        guard let value, !value.isEmpty else { return }
+    mutating func addText(_ identifier: String, _ value: String) {
+        guard !value.isEmpty else { return }
         append(identifier, [Self.unicodeEncoding] + Self.unicode(value))
     }
 
-    mutating func addUserText(_ description: String, _ value: String?) {
-        guard let value, !value.isEmpty else { return }
+    mutating func addUserText(_ description: String, _ value: String) {
+        guard !value.isEmpty else { return }
         append(
             "TXXX",
             [Self.unicodeEncoding] + Self.unicode(description) + Self.unicodeTerminator

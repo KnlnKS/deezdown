@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 /// Deezer's search bar: a filled, borderless field at the leading edge of the top bar.

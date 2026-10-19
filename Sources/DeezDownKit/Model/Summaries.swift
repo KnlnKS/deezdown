@@ -143,11 +143,11 @@ public struct SearchResults: Sendable, Equatable {
 }
 
 public struct HomeFeed: Sendable, Equatable {
-    public var history: [AlbumSummary] = []
-    public var playlists: [PlaylistSummary] = []
-    public var artists: [ArtistSummary] = []
-    public var topAlbums: [AlbumSummary] = []
-    public var topPlaylists: [PlaylistSummary] = []
+    public var history: [AlbumSummary]
+    public var playlists: [PlaylistSummary]
+    public var artists: [ArtistSummary]
+    public var topAlbums: [AlbumSummary]
+    public var topPlaylists: [PlaylistSummary]
 }
 
 public struct AlbumDetail: Sendable, Equatable {
@@ -156,14 +156,16 @@ public struct AlbumDetail: Sendable, Equatable {
     public var artistPicture: String
     public var label: String
     public var genres: [String]
-    public var duration: Int
     public var discTotal: Int
+
+    public var duration: Int { tracks.reduce(0) { $0 + $1.duration } }
 }
 
 public struct PlaylistDetail: Sendable, Equatable {
     public var summary: PlaylistSummary
     public var tracks: [TrackSummary]
-    public var duration: Int
+
+    public var duration: Int { tracks.reduce(0) { $0 + $1.duration } }
 }
 
 public struct ArtistDetail: Sendable, Equatable {

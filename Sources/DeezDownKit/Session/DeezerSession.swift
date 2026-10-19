@@ -16,7 +16,6 @@ public actor DeezerSession {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private var apiToken: String?
-    private var arl: String?
     private var licenseRefreshedAt: ContinuousClock.Instant?
     private var userRefresh: Task<DeezerUser?, any Error>?
 
@@ -31,23 +30,15 @@ public actor DeezerSession {
         let trimmed = candidate.filter { !$0.isWhitespace }
         guard !trimmed.isEmpty, trimmed.allSatisfy(\.isHexDigit) else { throw DeezerError.invalidARL }
 
-        apiToken = nil
-        user = nil
-        arl = trimmed
-        urlSession.configuration.httpCookieStorage?.removeCookies(since: .distantPast)
+        logout()
         setCookie(name: "arl", value: trimmed)
-
-        let results = try await gateway("deezer.getUserData")
-        guard let loaded = makeUser(from: results) else { throw DeezerError.invalidARL }
-        user = loaded
-        licenseRefreshedAt = .now
+        guard let loaded = try await loadUser() else { throw DeezerError.invalidARL }
         return loaded
     }
 
     public func logout() {
         user = nil
         apiToken = nil
-        arl = nil
         urlSession.configuration.httpCookieStorage?.removeCookies(since: .distantPast)
     }
 
@@ -63,22 +54,21 @@ public actor DeezerSession {
     /// the same user-data request from every batch in flight.
     private func refreshedUser() async throws -> DeezerUser? {
         if let refreshing = userRefresh { return try await refreshing.value }
-        let refresh = Task { () throws -> DeezerUser? in
-            guard let loaded = makeUser(from: try await gateway("deezer.getUserData")) else { return nil }
-            user = loaded
-            licenseRefreshedAt = .now
-            return loaded
-        }
+        let refresh = Task { try await loadUser() }
         userRefresh = refresh
         defer { userRefresh = nil }
         return try await refresh.value
     }
 
-    private func makeUser(from results: JSONValue) -> DeezerUser? {
+    /// Nil when Deezer doesn't recognise the session's cookie.
+    private func loadUser() async throws -> DeezerUser? {
+        let results = try await gateway("deezer.getUserData")
         guard !results.objectValue.isEmpty else { return nil }
-        let candidate = DeezerUser(results: results)
-        guard candidate.id != "0", !candidate.id.isEmpty else { return nil }
-        return candidate
+        let loaded = DeezerUser(results: results)
+        guard loaded.id != "0", !loaded.id.isEmpty else { return nil }
+        user = loaded
+        licenseRefreshedAt = .now
+        return loaded
     }
 
     private func setCookie(name: String, value: String) {

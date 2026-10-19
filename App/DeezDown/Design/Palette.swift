@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 extension NSColor {
@@ -34,13 +33,10 @@ extension Color {
 
 extension ShapeStyle where Self == Color {
     static var brand: Color { .brand }
-    static var success: Color { .success }
-    static var warning: Color { .warning }
     static var failure: Color { .failure }
 }
 
 enum Metrics {
-    static let cornerRadius: CGFloat = 10
     static let cardCorner: CGFloat = 12
     static let artworkCorner: CGFloat = 8
     static let gutter: CGFloat = 28

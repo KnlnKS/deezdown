@@ -6,7 +6,6 @@ struct RootView: View {
 
     @State private var navigator = Navigator()
     @State private var findRequest: UUID?
-    @State private var showAddLink = false
 
     var body: some View {
         Group {
@@ -20,16 +19,14 @@ struct RootView: View {
         }
         .background(Color.canvas)
         .tint(.brand)
-        .overlay(alignment: .bottom) { ToastView(toast: model.toast) }
+        .overlay(alignment: .bottom) { ToastView() }
         .onChange(of: model.command) { _, command in
             guard let command, model.isSignedIn else { return }
             switch command.kind {
-            case .addLink: showAddLink = true
             case .findInSearch: findRequest = command.id
             case .showDownloads: navigator.show(.downloads)
             }
         }
-        .sheet(isPresented: $showAddLink) { AddLinkSheet() }
     }
 
     private var browser: some View {
@@ -84,23 +81,17 @@ struct RootView: View {
         }
     }
 
-    /// Every page in the stack carries the trailing actions itself, since on the split view the
-    /// spacer that pushes them to the trailing edge is dropped.
+    /// Every page in the stack carries the spacer that pushes its actions to the trailing edge,
+    /// since on the split view a shared one is dropped.
     private func page(_ screen: some View) -> some View {
         screen
-            .toolbar {
-                ToolbarSpacer(.flexible)
-                ToolbarItem {
-                    Button("Add Link", systemImage: "plus") { showAddLink = true }
-                        .help("Add a Deezer link to the queue (⌘L)")
-                }
-            }
+            .toolbar { ToolbarSpacer(.flexible) }
             .navigationBarBackButtonHidden()
     }
 
     private func submitSearch() {
-        let text = navigator.query.trimmingCharacters(in: .whitespaces)
-        guard LinkParser.isLink(text) else { return }
+        let text = navigator.query
+        guard LinkParser.split(text).contains(where: LinkParser.isLink) else { return }
         Task { await model.enqueue(pasted: text) }
         navigator.search("")
     }

@@ -1,43 +1,29 @@
 import Foundation
 
-public struct DownloadContext: Sendable {
-    public var playlist: Playlist?
-    public var isSingleTrackDownload: Bool
-    public var rootArtist: ArtistRef?
-    public var format: TrackFormat
-    public var today: CustomDate
-
-    public init(
-        playlist: Playlist? = nil,
-        isSingleTrackDownload: Bool = false,
-        rootArtist: ArtistRef? = nil,
-        format: TrackFormat = .flac,
-        today: CustomDate = .today
-    ) {
-        self.playlist = playlist
-        self.isSingleTrackDownload = isSingleTrackDownload
-        self.rootArtist = rootArtist
-        self.format = format
-        self.today = today
-    }
+struct DownloadContext: Sendable {
+    var playlist: Playlist?
+    var isSingleTrackDownload = false
+    var rootArtist: ArtistRef?
+    var format = TrackFormat.flac
+    var today = CustomDate.today
 }
 
-public struct DownloadPaths: Sendable, Equatable {
-    public var filename: String
-    public var directory: URL
-    public var artistDirectory: URL?
-    public var coverDirectory: URL?
-    public var extrasDirectory: URL
+struct DownloadPaths: Sendable, Equatable {
+    var filename: String
+    var directory: URL
+    var artistDirectory: URL?
+    var coverDirectory: URL?
+    var extrasDirectory: URL
 }
 
 public struct PathBuilder: Sendable {
     let settings: DownloadSettings
 
-    public init(settings: DownloadSettings) {
+    init(settings: DownloadSettings) {
         self.settings = settings
     }
 
-    public func trackVariables(_ track: Track, _ context: DownloadContext) -> TemplateVariables {
+    func trackVariables(_ track: Track, _ context: DownloadContext) -> TemplateVariables {
         let date = track.date ?? track.album.date
         let featured = track.featuredArtistsString
         return [
@@ -74,7 +60,7 @@ public struct PathBuilder: Sendable {
         ]
     }
 
-    public func albumVariables(_ track: Track, _ context: DownloadContext) -> TemplateVariables {
+    func albumVariables(_ track: Track, _ context: DownloadContext) -> TemplateVariables {
         let album = track.album
         return [
             "album": album.title,
@@ -98,7 +84,7 @@ public struct PathBuilder: Sendable {
         ]
     }
 
-    public func artistVariables(_ track: Track, _ context: DownloadContext) -> TemplateVariables {
+    func artistVariables(_ track: Track, _ context: DownloadContext) -> TemplateVariables {
         [
             "artist": track.album.mainArtist.name,
             "artist_id": track.album.mainArtist.id,
@@ -107,7 +93,7 @@ public struct PathBuilder: Sendable {
         ]
     }
 
-    public func playlistVariables(_ playlist: Playlist, _ context: DownloadContext) -> TemplateVariables {
+    func playlistVariables(_ playlist: Playlist, _ context: DownloadContext) -> TemplateVariables {
         [
             "playlist": playlist.title,
             "playlist_id": playlist.id,
@@ -120,7 +106,7 @@ public struct PathBuilder: Sendable {
         ]
     }
 
-    public func paths(for track: Track, context: DownloadContext) -> DownloadPaths {
+    func paths(for track: Track, context: DownloadContext) -> DownloadPaths {
         let asCompilation = settings.tags.savePlaylistAsCompilation && context.playlist != nil
         let insidePlaylist = context.playlist != nil && !asCompilation
         let followsAlbumStructure = !insidePlaylist || settings.createStructurePlaylist
@@ -166,7 +152,7 @@ public struct PathBuilder: Sendable {
 
     /// As in deemix, the template follows what was asked for: a playlist, even one saved as a
     /// compilation, names its tracks with the playlist template.
-    public func filenameTemplate(for context: DownloadContext) -> String {
+    func filenameTemplate(for context: DownloadContext) -> String {
         if context.playlist != nil {
             settings.playlistTracknameTemplate
         } else if context.isSingleTrackDownload && !settings.createSingleFolder {
@@ -176,7 +162,7 @@ public struct PathBuilder: Sendable {
         }
     }
 
-    public func collectionVariables(_ item: QueueItem, playlist: Playlist?, size: Int) -> TemplateVariables {
+    func collectionVariables(_ item: QueueItem, playlist: Playlist?, size: Int) -> TemplateVariables {
         [
             "title": item.title,
             "artist": item.subtitle,
@@ -189,7 +175,7 @@ public struct PathBuilder: Sendable {
     }
 
     /// Cover, artist image and playlist file names stay a single component.
-    public func collectionName(_ template: String, _ variables: TemplateVariables, fallback: String) -> String {
+    func collectionName(_ template: String, _ variables: TemplateVariables, fallback: String) -> String {
         let name = components(template, variables).joined(separator: settings.illegalCharacterReplacer)
         return name == "dot" ? fallback : name
     }

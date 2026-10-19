@@ -1,6 +1,5 @@
 import AVFoundation
 import DeezDownKit
-import Observation
 import SwiftUI
 
 /// Deezer's 30-second preview clips are unencrypted MP3s, so AVPlayer can take them directly.

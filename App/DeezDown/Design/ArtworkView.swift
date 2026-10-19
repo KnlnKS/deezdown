@@ -53,12 +53,12 @@ private struct ArtworkContent<Outline: InsettableShape>: View {
     var shape: Outline
     var requestedSize: Int
     var placeholderSize: CGFloat
-    var fillsContainer = false
 
     @State private var image: NSImage?
 
     var body: some View {
-        well
+        shape.fill(Color.sunken)
+            .aspectRatio(1, contentMode: .fit)
             .overlay {
                 if let image {
                     Image(nsImage: image)
@@ -77,15 +77,6 @@ private struct ArtworkContent<Outline: InsettableShape>: View {
             .task(id: picture) {
                 image = await ArtworkLoader.shared.image(for: picture, size: requestedSize)
             }
-    }
-
-    @ViewBuilder
-    private var well: some View {
-        if fillsContainer {
-            shape.fill(Color.sunken).aspectRatio(1, contentMode: .fit)
-        } else {
-            shape.fill(Color.sunken)
-        }
     }
 }
 
@@ -119,16 +110,13 @@ struct FillingArtworkView: View {
 
     var body: some View {
         if picture.isRound {
-            ArtworkContent(
-                picture: picture, shape: Circle(), requestedSize: 500,
-                placeholderSize: 34, fillsContainer: true
-            )
+            content(Circle())
         } else {
-            ArtworkContent(
-                picture: picture,
-                shape: RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous),
-                requestedSize: 500, placeholderSize: 34, fillsContainer: true
-            )
+            content(RoundedRectangle(cornerRadius: Metrics.cardCorner, style: .continuous))
         }
+    }
+
+    private func content(_ shape: some InsettableShape) -> some View {
+        ArtworkContent(picture: picture, shape: shape, requestedSize: 500, placeholderSize: 34)
     }
 }

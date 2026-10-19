@@ -17,16 +17,14 @@ public enum ArtistRole: String, Sendable, Codable, Equatable {
 public struct ArtistRef: Sendable, Codable, Equatable {
     public var id: String
     public var name: String
-    public var picture: Artwork
-    public var role: ArtistRole
+    public var picture = Artwork(md5: "", kind: .artist)
+    public var role = ArtistRole.main
 
-    public init(id: String, name: String, picture: Artwork = Artwork(md5: "", kind: .artist), role: ArtistRole = .main) {
-        self.id = id
-        self.name = name
-        self.picture = picture
-        self.role = role
-    }
+    public static let variousArtistsID = "5080"
+    public var isVariousArtists: Bool { id == Self.variousArtistsID }
+}
 
+extension ArtistRef {
     init(gateway: JSONValue) {
         id = gateway["ART_ID"].stringValue ?? "0"
         name = gateway["ART_NAME"].stringValue ?? ""
@@ -44,7 +42,4 @@ public struct ArtistRef: Sendable, Codable, Equatable {
             role: ArtistRole(rawValue: publicData["role"].stringValue ?? "") ?? .main
         )
     }
-
-    public static let variousArtistsID = "5080"
-    public var isVariousArtists: Bool { id == Self.variousArtistsID }
 }

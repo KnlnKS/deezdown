@@ -70,9 +70,7 @@ public enum Tagger {
                     ? "\(track.discNumber)/\(track.album.discTotal)" : "\(track.discNumber)"
             )
         }
-        if tags.genre, !track.album.genres.isEmpty {
-            writer.addText("TCON", joined(track.album.genres, tags, separator: ";"))
-        }
+        if tags.genre { writer.addText("TCON", joined(track.album.genres, tags, separator: ";")) }
         if let date = track.date ?? track.album.date {
             if tags.year { writer.addText("TYER", date.year) }
             if tags.date, date.day != "00", date.month != "00" {
@@ -90,9 +88,7 @@ public enum Tagger {
         }
         if tags.lyrics, let unsynced = track.lyrics?.unsynced { writer.addUnsyncedLyrics(unsynced) }
         if tags.syncedLyrics, let lyrics = track.lyrics { writer.addSyncedLyrics(lyrics.id3Sync) }
-        if tags.composer, let composers = track.contributors["composer"], !composers.isEmpty {
-            writer.addText("TCOM", joined(composers, tags))
-        }
+        if tags.composer { writer.addText("TCOM", joined(track.contributors["composer"] ?? [], tags)) }
         if tags.involvedPeople {
             var pairs: [(role: String, person: String)] = []
             for role in involvedRoles {
@@ -100,7 +96,7 @@ public enum Tagger {
             }
             writer.addInvolvedPeople(pairs)
         }
-        if tags.copyright, !track.copyright.isEmpty { writer.addText("TCOP", track.copyright) }
+        if tags.copyright { writer.addText("TCOP", track.copyright) }
         if track.album.recordType == .compile { writer.addText("TCMP", "1") }
         if tags.source {
             writer.addUserText("SOURCE", "Deezer")
@@ -156,8 +152,8 @@ public enum Tagger {
     static func tagFLAC(_ track: Track, at url: URL, artwork: Data?, settings: DownloadSettings) throws {
         let tags = settings.tags
         var comments: [(String, String)] = []
-        func add(_ field: String, _ value: String?) {
-            guard let value, !value.isEmpty else { return }
+        func add(_ field: String, _ value: String) {
+            guard !value.isEmpty else { return }
             comments.append((field, value))
         }
 
@@ -205,7 +201,7 @@ public enum Tagger {
             for publisher in track.contributors["musicpublisher"] ?? [] { add("ORGANIZATION", publisher) }
         }
         if tags.composer { for composer in track.contributors["composer"] ?? [] { add("COMPOSER", composer) } }
-        if tags.copyright, !track.copyright.isEmpty { add("COPYRIGHT", track.copyright) }
+        if tags.copyright { add("COPYRIGHT", track.copyright) }
         if track.album.recordType == .compile { add("COMPILATION", "1") }
         if tags.source {
             add("SOURCE", "Deezer")

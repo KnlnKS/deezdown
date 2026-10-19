@@ -13,10 +13,6 @@ public struct ResolvedCollection: Sendable {
 public struct LinkResolver: Sendable {
     let session: DeezerSession
 
-    public init(session: DeezerSession) {
-        self.session = session
-    }
-
     public func resolve(_ link: DeezerLink) async throws -> ResolvedCollection {
         switch link {
         case .track(let id): try await resolveTrack(id)

@@ -22,7 +22,6 @@ struct SignInScreen: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                        .frame(maxWidth: 380)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -31,18 +30,15 @@ struct SignInScreen: View {
                         .font(.system(.body, design: .monospaced))
                         .focused($focused)
                         .onSubmit(submit)
-                        .frame(width: 380)
 
                     if case .failed(let reason) = model.signInState {
                         Label(reason, systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(.failure)
-                            .frame(width: 380, alignment: .leading)
                     } else {
                         Text("Find it in your browser cookies for deezer.com as the `arl` value.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
-                            .frame(width: 380, alignment: .leading)
                     }
                 }
 
@@ -55,9 +51,9 @@ struct SignInScreen: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .frame(width: 380)
                 .disabled(arl.isEmpty || model.signInState == .signingIn)
             }
+            .frame(width: 380)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

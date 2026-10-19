@@ -3,27 +3,15 @@ import Foundation
 public struct Playlist: Sendable, Equatable {
     public var id: String
     public var title: String
-    public var picture: Artwork
-    public var owner: String
-    public var ownerID: String
-    public var trackCount: Int
+    public var picture = Artwork(md5: "", kind: .playlist)
+    public var owner = ""
+    public var ownerID = "0"
+    public var trackCount = 0
     public var date: CustomDate?
-    public var explicit: Bool
+    public var explicit = false
+}
 
-    public init(
-        id: String, title: String, picture: Artwork = Artwork(md5: "", kind: .playlist),
-        owner: String = "", ownerID: String = "0", trackCount: Int = 0, date: CustomDate? = nil, explicit: Bool = false
-    ) {
-        self.id = id
-        self.title = title
-        self.picture = picture
-        self.owner = owner
-        self.ownerID = ownerID
-        self.trackCount = trackCount
-        self.date = date
-        self.explicit = explicit
-    }
-
+extension Playlist {
     init(gateway: JSONValue) {
         id = gateway["PLAYLIST_ID"].stringValue ?? "0"
         title = gateway["TITLE"].stringValue ?? ""

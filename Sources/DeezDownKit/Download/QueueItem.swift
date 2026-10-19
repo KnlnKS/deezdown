@@ -25,12 +25,12 @@ public struct QueueItem: Sendable, Codable, Equatable, Identifiable {
     public var subtitle: String
     public var cover: Artwork
     public var format: TrackFormat
-    public var status: QueueStatus
+    public var status = QueueStatus.queued
     public var totalTracks: Int
-    public var completedTracks: Int
-    public var failedTracks: Int
-    public var progress: Double
-    public var issues: [TrackIssue]
+    public var completedTracks = 0
+    public var failedTracks = 0
+    public var progress = 0.0
+    public var issues: [TrackIssue] = []
     public var destination: URL?
     public var rootArtist: ArtistRef?
 
@@ -46,11 +46,6 @@ public struct QueueItem: Sendable, Codable, Equatable, Identifiable {
         self.format = format
         self.totalTracks = totalTracks
         self.rootArtist = rootArtist
-        status = .queued
-        completedTracks = 0
-        failedTracks = 0
-        progress = 0
-        issues = []
     }
 
     /// Bitrate is part of the identity, so the same album at two qualities is two queue entries.
@@ -64,11 +59,11 @@ public struct QueueItem: Sendable, Codable, Equatable, Identifiable {
         failedTracks = 0
         progress = 0
         issues = []
+        destination = nil
     }
 
     public var canRetry: Bool { status == .withErrors || status == .failed || status == .canceled }
     public var canPause: Bool { !status.isFinished && status != .paused }
     public var canResume: Bool { status == .paused }
-    /// Finished with nothing to look into; failures stay until they are read.
-    public var canClear: Bool { status == .completed || status == .canceled }
+    public var canClear: Bool { status.isFinished }
 }

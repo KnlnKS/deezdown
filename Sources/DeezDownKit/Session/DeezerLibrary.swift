@@ -20,7 +20,7 @@ public struct DeezerLibrary: Sendable {
     }
 
     public func search<Item: Searchable>(
-        _ query: String, as type: Item.Type = Item.self, start: Int, limit: Int
+        _ query: String, as type: Item.Type, start: Int, limit: Int
     ) async throws -> (items: [Item], total: Int) {
         let (items, total) = try await session.search(query: query, kind: Item.searchKind, start: start, limit: limit)
         return (items.map(Item.init(gateway:)), total)
@@ -47,7 +47,6 @@ public struct DeezerLibrary: Sendable {
                 ?? data["ART_PICTURE"].stringValue ?? "",
             label: data["LABEL_NAME"].stringValue ?? publicData?["label"].stringValue ?? "",
             genres: publicData?["genres"]["data"].arrayValue.compactMap { $0["name"].stringValue } ?? [],
-            duration: tracks.reduce(0) { $0 + $1.duration },
             discTotal: data["NUMBER_DISK"].intValue ?? 1
         )
     }
@@ -59,9 +58,7 @@ public struct DeezerLibrary: Sendable {
         let tracks = try await entriesTask.map(TrackSummary.init(gateway:))
         var summary = PlaylistSummary(gateway: data)
         if summary.trackCount == 0 { summary.trackCount = tracks.count }
-        return PlaylistDetail(
-            summary: summary, tracks: tracks, duration: tracks.reduce(0) { $0 + $1.duration }
-        )
+        return PlaylistDetail(summary: summary, tracks: tracks)
     }
 
     public func artist(id: String) async throws -> ArtistDetail {
