@@ -1,0 +1,153 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+      - "LICENSE"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+env:
+  XCODE_APP: /Applications/Xcode_27.0.app
+
+jobs:
+  release:
+    name: Build, test and publish
+    runs-on: xcode-27
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: |
+          if [ -d "$XCODE_APP" ]; then
+            sudo xcode-select --switch "$XCODE_APP"
+          else
+            echo "::warning::$XCODE_APP not present, using the image default"
+          fi
+          xcodebuild -version
+          swift --version
+
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v6
+        with:
+          path: .build
+          key: swiftpm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: swiftpm-${{ runner.os }}-
+
+      - name: Test DeezDownKit
+        run: swift test
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec App/project.yml
+
+      - name: Resolve version
+        id: version
+        run: |
+          echo "name=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "tag=v1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build app
+        run: |
+          xcodebuild \
+            -project App/DeezDown.xcodeproj \
+            -scheme DeezDown \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath DerivedData \
+            MARKETING_VERSION='${{ steps.version.outputs.name }}' \
+            CURRENT_PROJECT_VERSION='${{ github.run_number }}' \
+            build
+
+      - name: Build CLI
+        id: cli
+        run: |
+          set -euo pipefail
+          VERSION='${{ steps.version.outputs.name }}'
+          sed -i '' -E "s/(version: )\"[^\"]*\"/\1\"$VERSION\"/" Sources/deezdown/Deezdown.swift
+          ARGS=(-c release --arch arm64 --arch x86_64 --product deezdown)
+          swift build "${ARGS[@]}"
+          BIN="$(swift build "${ARGS[@]}" --show-bin-path)/deezdown"
+          test "$("$BIN" --version)" = "$VERSION"
+          echo "bin=$BIN" >> "$GITHUB_OUTPUT"
+
+      - name: Package
+        id: package
+        run: |
+          set -euo pipefail
+          APP="DerivedData/Build/Products/Release/DeezDown.app"
+          test -d "$APP"
+          codesign --verify --strict --verbose=2 "$APP"
+          APP_ARCHIVE="DeezDown-${{ steps.version.outputs.name }}.zip"
+          ditto -c -k --keepParent --sequesterRsrc "$APP" "$APP_ARCHIVE"
+
+          CLI_ARCHIVE="deezdown-${{ steps.version.outputs.name }}.tar.gz"
+          tar -czf "$CLI_ARCHIVE" -C "$(dirname '${{ steps.cli.outputs.bin }}')" deezdown
+
+          echo "app=$APP_ARCHIVE" >> "$GITHUB_OUTPUT"
+          echo "cli=$CLI_ARCHIVE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: DeezDown-${{ steps.version.outputs.name }}
+          path: |
+            ${{ steps.package.outputs.app }}
+            ${{ steps.package.outputs.cli }}
+          if-no-files-found: error
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_ARCHIVE: ${{ steps.package.outputs.app }}
+          CLI_ARCHIVE: ${{ steps.package.outputs.cli }}
+        run: |
+          set -euo pipefail
+          cat > notes.md <<EOF
+          Built from \`${GITHUB_SHA::7}\` on $(date -u '+%Y-%m-%d').
+
+          ### Install the app
+
+          Unzip and drag **DeezDown.app** to Applications, then run:
+
+          \`\`\`
+          xattr -dr com.apple.quarantine /Applications/DeezDown.app
+          \`\`\`
+
+          ### Install the command line tool
+
+          \`\`\`
+          tar -xzf $CLI_ARCHIVE
+          xattr -d com.apple.quarantine deezdown 2>/dev/null
+          sudo mv deezdown /usr/local/bin/
+          \`\`\`
+
+          Both are ad-hoc signed rather than signed with an Apple Developer ID and
+          notarised, so macOS quarantines them after download and refuses to open
+          them until that attribute is cleared.
+
+          Requires macOS 26 or later.
+
+          \`\`\`
+          SHA-256
+          $(shasum -a 256 "$APP_ARCHIVE" "$CLI_ARCHIVE")
+          \`\`\`
+          EOF
+          gh release create '${{ steps.version.outputs.tag }}' "$APP_ARCHIVE" "$CLI_ARCHIVE" \
+            --title 'DeezDown ${{ steps.version.outputs.name }}' \
+            --notes-file notes.md \
+            --target '${{ github.sha }}'
