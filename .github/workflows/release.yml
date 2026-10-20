@@ -3,10 +3,11 @@ name: Release
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "**.md"
-      - ".gitignore"
-      - "LICENSE"
+    paths:
+      - "Sources/**"
+      - "App/**"
+      - "Package.swift"
+      - "Package.resolved"
   workflow_dispatch:
 
 permissions:
