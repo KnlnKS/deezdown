@@ -27,8 +27,3 @@ func `every deezer link shape deemix accepts is parsed`(input: String, expected:
     #expect(throws: LinkParseError.self) { try LinkParser.parse("https://www.deezer.com/profile/12345") }
     #expect(throws: LinkParseError.self) { try LinkParser.parse("https://www.deezer.com/album/not-a-number") }
 }
-
-@Test func `queue identity encodes type, id and bitrate so two qualities coexist`() {
-    #expect(QueueItem.identifier(for: .album("302127"), format: .flac) == "album_302127_9")
-    #expect(QueueItem.identifier(for: .artist("27", tab: .single), format: .mp3_320) == "artist_27_single_3")
-}

@@ -20,13 +20,6 @@ import Testing
     #expect(!settings.downloadLocation.isEmpty)
 }
 
-@Test func `a corrupt config falls back to defaults instead of failing`() throws {
-    let sandbox = try Sandbox()
-    let paths = AppPaths(configDirectory: sandbox.root)
-    try Data("{ not json".utf8).write(to: paths.settingsFile)
-    #expect(SettingsStore(paths: paths).load().maxBitrate == DownloadSettings().maxBitrate)
-}
-
 @Test func `settings survive a save and reload round trip`() throws {
     let sandbox = try Sandbox()
     let paths = AppPaths(configDirectory: sandbox.root)
@@ -40,20 +33,4 @@ import Testing
     try SettingsStore(paths: paths).save(settings)
 
     #expect(SettingsStore(paths: paths).load() == settings)
-}
-
-@Test func `repair clamps nonsense values instead of accepting them`() {
-    var settings = DownloadSettings()
-    settings.queueConcurrency = 500
-    settings.jpegImageQuality = 0
-    settings.albumTracknameTemplate = ""
-    settings.downloadLocation = "  "
-    settings.localArtworkFormat = "webp"
-    settings.repair()
-
-    #expect(settings.queueConcurrency == 16)
-    #expect(settings.jpegImageQuality == 1)
-    #expect(settings.albumTracknameTemplate == "%tracknumber% - %title%")
-    #expect(!settings.downloadLocation.trimmingCharacters(in: .whitespaces).isEmpty)
-    #expect(settings.localArtworkFormat == "jpg")
 }

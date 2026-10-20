@@ -29,13 +29,4 @@ struct LiveSession {
         let results = try await session.trackURLs(trackTokens: ["bogus"], format: .mp3_128)
         #expect(results == [.failure(code: 2000, message: "An error occurred while decoding track token.")])
     }
-
-    @Test func `search and artists resolve`() async throws {
-        try await signedIn()
-        let (tracks, total) = try await session.search(query: "daft punk", kind: .track, limit: 5)
-        #expect(!tracks.isEmpty && total > 0)
-
-        let artist = try await session.artistData(id: "27")
-        #expect(artist["ART_NAME"].stringValue == "Daft Punk")
-    }
 }

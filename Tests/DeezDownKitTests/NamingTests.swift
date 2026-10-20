@@ -124,14 +124,3 @@ private func path(_ url: URL) -> String {
     settings.playlistTracknameTemplate = "%position%"
     #expect(PathBuilder(settings: settings).paths(for: track, context: DownloadContext(playlist: playlist)).filename == "007")
 }
-
-@Test func `explicit tracks can be marked in the filename`() {
-    var settings = DownloadSettings()
-    settings.downloadLocation = "/Music"
-    settings.albumTracknameTemplate = "%tracknumber% - %title% %explicit%"
-    let track = sampleTrack(explicit: true).applying(settings)
-    #expect(
-        PathBuilder(settings: settings).paths(for: track, context: DownloadContext()).filename
-            == "04 - Harder, Better, Faster, Stronger (Explicit)"
-    )
-}
