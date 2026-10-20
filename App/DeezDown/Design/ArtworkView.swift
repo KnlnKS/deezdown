@@ -33,7 +33,7 @@ actor ArtworkLoader {
 
         let task = Task<NSImage?, Never> { [session] in
             guard let (data, _) = try? await session.data(from: url) else { return nil }
-            return NSImage(data: data)
+            return await Self.decode(data)
         }
         inFlight[url] = task
         let image = await task.value
@@ -43,6 +43,16 @@ actor ArtworkLoader {
             cache.setObject(image, forKey: url as NSURL, cost: pixels * 4)
         }
         return image
+    }
+
+    /// `NSImage(data:)` would leave the decoding to the first draw, on the main thread.
+    @concurrent
+    private static func decode(_ data: Data) async -> NSImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let image = CGImageSourceCreateImageAtIndex(
+                source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
+        else { return nil }
+        return NSImage(cgImage: image, size: .zero)
     }
 }
 
