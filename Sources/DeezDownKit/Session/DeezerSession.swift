@@ -14,7 +14,6 @@ public actor DeezerSession {
     private let urlSession: URLSession
     private let publicLimiter = RateLimiter(limit: 45, window: .seconds(5))
     private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
     private var apiToken: String?
     private var licenseRefreshedAt: ContinuousClock.Instant?
     private var userRefresh: Task<DeezerUser?, any Error>?
@@ -221,12 +220,14 @@ public actor DeezerSession {
 
     // MARK: - Transport
 
-    private func send(_ request: URLRequest) async throws -> JSONValue {
+    /// Parsed off the actor, so responses arriving together don't queue behind each other.
+    @concurrent
+    private nonisolated func send(_ request: URLRequest) async throws -> JSONValue {
         let (data, response) = try await urlSession.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw DeezerError.http(http.statusCode)
         }
-        return try decoder.decode(JSONValue.self, from: data)
+        return try JSONValue(parsing: data)
     }
 
     private func isTransient(_ error: any Error) -> Bool {

@@ -14,7 +14,7 @@ public struct SettingsStore: Sendable {
     public func load() -> DownloadSettings {
         var settings = DownloadSettings()
         if let stored = try? Data(contentsOf: paths.settingsFile),
-            let overlay = try? JSONDecoder().decode(JSONValue.self, from: stored),
+            let overlay = try? JSONValue(parsing: stored),
             let base = try? settings.json()
         {
             if let decoded = DownloadSettings(json: base.merging(overlay)) {
@@ -44,7 +44,7 @@ public struct SettingsStore: Sendable {
 extension DownloadSettings {
     /// The settings as the config file's tree, which a partial config can be merged onto.
     public func json() throws -> JSONValue {
-        try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(self))
+        try JSONValue(parsing: JSONEncoder().encode(self))
     }
 
     public init?(json: JSONValue) {
