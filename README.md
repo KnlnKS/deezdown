@@ -45,6 +45,10 @@ open App/DeezDown.xcodeproj
 
 `DeezDownKit` is the Deezer Swift library; the app and the `deezdown` CLI sit on top of it.
 
+## License
+
+[MIT](LICENSE).
+
 ## Not affiliated with Deezer
 
 DeezDown is unofficial. It is not affiliated with, endorsed by, or connected to Deezer, and Deezer is their trademark. Use it at your own risk and stay within Deezer's terms of service.
