@@ -9,8 +9,9 @@ enum FinderIcon {
         format.fileExtension != "mp3"
     }
 
-    @MainActor
-    static func apply(_ artwork: Data, to url: URL) {
+    /// About 60 ms a file, which on the main actor stalled the app as each track finished.
+    @concurrent
+    static func apply(_ artwork: Data, to url: URL) async {
         guard let image = NSImage(data: artwork) else { return }
         NSWorkspace.shared.setIcon(image, forFile: url.path(percentEncoded: false), options: [])
     }
