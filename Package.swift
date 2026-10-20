@@ -12,22 +12,14 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
     ],
     targets: [
-        .target(
-            name: "DeezDownKit",
-            swiftSettings: [.swiftLanguageMode(.v6)]
-        ),
+        .target(name: "DeezDownKit"),
         .executableTarget(
             name: "deezdown",
             dependencies: [
                 "DeezDownKit",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            ],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            ]
         ),
-        .testTarget(
-            name: "DeezDownKitTests",
-            dependencies: ["DeezDownKit"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
-        ),
+        .testTarget(name: "DeezDownKitTests", dependencies: ["DeezDownKit"]),
     ]
 )

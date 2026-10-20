@@ -12,7 +12,6 @@ struct Fetched<Value, Content: View>: View {
 
     @Environment(AppModel.self) private var model
     var key: String
-    /// Offers a Refresh that skips the cache.
     var refreshable = false
     var fetch: (DeezerLibrary) async throws -> Value
     @ViewBuilder var content: (Value) -> Content

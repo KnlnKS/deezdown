@@ -44,10 +44,7 @@ enum ID3v1Writer {
         bytes += latin(album, 30)
         bytes += latin(year, 4)
         bytes += [UInt8](repeating: 0, count: 30)
-        if trackNumber > 0, trackNumber < 256 {
-            bytes[125] = 0
-            bytes[126] = UInt8(trackNumber)
-        }
+        if trackNumber > 0, trackNumber < 256 { bytes[126] = UInt8(trackNumber) }
         let index = genre.flatMap { name in genres.firstIndex { $0.caseInsensitiveCompare(name) == .orderedSame } }
         bytes.append(index.map(UInt8.init) ?? 255)
         return Data(bytes)

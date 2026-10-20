@@ -10,7 +10,6 @@ struct Sandbox: ~Copyable {
 
     deinit { try? FileManager.default.removeItem(at: root) }
 
-    /// Writes a file at a path inside the sandbox, making any folders on the way.
     @discardableResult
     func write(_ data: Data, to path: String) throws -> URL {
         let url = root.appending(path: path)

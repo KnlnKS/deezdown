@@ -20,7 +20,7 @@ final class LiveEngine {
     private func engine() async throws -> DownloadEngine {
         if await session.user == nil { try await session.login(arl: #require(liveARL)) }
         let paths = AppPaths(configDirectory: sandbox.root.appending(path: "config"))
-        return DownloadEngine(session: session, settings: settings, queueDirectory: paths.queueDirectory)
+        return await DownloadEngine(session: session, settings: settings, queueDirectory: paths.queueDirectory)
     }
 
     private func drain(_ engine: DownloadEngine) async -> [QueueItem] {
@@ -70,7 +70,6 @@ final class LiveEngine {
         await engine.cancelAll()
 
         let restored = try await self.engine()
-        await restored.restore()
         let queue = await restored.queue
         #expect(queue.count == 1)
         #expect(queue.first?.id == "album_302127_9")

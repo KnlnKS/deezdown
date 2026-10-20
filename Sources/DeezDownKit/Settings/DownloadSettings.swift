@@ -144,7 +144,6 @@ public struct DownloadSettings: Sendable, Codable, Equatable {
     public var logSearched = false
     public var createM3U8File = false
     public var syncedLyrics = false
-    /// Run through the shell after each download, with %folder% and %filename% filled in.
     public var executeCommand = ""
 
     public var saveArtwork = true
@@ -156,7 +155,6 @@ public struct DownloadSettings: Sendable, Codable, Equatable {
     public var jpegImageQuality = 90
     public var finderArtwork = true
 
-    /// Y, M and D stand for the year, month and day.
     public var dateFormat = "Y-M-D"
     public var albumVariousArtists = true
     public var removeAlbumVersion = false

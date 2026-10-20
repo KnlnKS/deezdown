@@ -43,7 +43,7 @@ public actor DownloadEngine {
 
     /// Without a queue directory nothing is persisted, so a one-shot run such as the CLI
     /// cannot overwrite the queue the app restores.
-    public init(session: DeezerSession, settings: DownloadSettings, queueDirectory: URL? = nil) {
+    public init(session: DeezerSession, settings: DownloadSettings, queueDirectory: URL? = nil) async {
         self.session = session
         self.settings = settings
         self.settings.repair()
@@ -51,14 +51,16 @@ public actor DownloadEngine {
         if let queueDirectory {
             try? FileManager.default.createDirectory(at: queueDirectory, withIntermediateDirectories: true)
         }
+        restore()
     }
 
     // MARK: - Observation
 
     public var queue: [QueueItem] { order.compactMap { items[$0] } }
 
+    /// Each snapshot is the whole queue, so a slow reader skips straight to the latest.
     public func events() -> AsyncStream<[QueueItem]> {
-        AsyncStream { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             let id = UUID()
             observers[id] = continuation
             continuation.yield(queue)
@@ -124,7 +126,8 @@ public actor DownloadEngine {
             ]
         }
         async let artistTask = session.artistData(id: id)
-        let albums = try await LinkResolver(session: session).artistAlbums(id, tab: tab)
+        let albums = ArtistTab.sorting(try await session.artistDiscography(id: id), artistID: id)[tab] ?? []
+        guard !albums.isEmpty else { throw DownloadFailure(.noReleases(tab)) }
         let artist = (try? await artistTask).map(ArtistRef.init(gateway:))
         return albums.map {
             QueueItem(
@@ -134,15 +137,11 @@ public actor DownloadEngine {
         }
     }
 
-    public func cancel(_ id: String) {
-        cancel(Set([id]))
-    }
-
     public func cancelAll() {
         cancel(Set(order))
     }
 
-    private func cancel(_ ids: Set<String>) {
+    public func cancel(_ ids: Set<String>) {
         let unfinished = ids.filter { items[$0]?.status.isFinished == false }
         guard !unfinished.isEmpty else { return }
         stopWork(for: unfinished)
@@ -152,9 +151,9 @@ public actor DownloadEngine {
         pump()
     }
 
-    public func remove(_ id: String) {
-        stopWork(for: [id])
-        discard([id])
+    public func remove(_ ids: Set<String>) {
+        stopWork(for: ids)
+        discard(ids)
     }
 
     public func clearFinished() {
@@ -182,17 +181,13 @@ public actor DownloadEngine {
         publish()
     }
 
-    public func pause(_ id: String) {
-        pause(Set([id]))
-    }
-
     public func pauseAll() {
         pause(Set(order))
     }
 
     /// Pausing stops the tracks in flight too, which start over on resume: a whole album is often
     /// in flight at once, so letting them finish would not pause it.
-    private func pause(_ ids: Set<String>) {
+    public func pause(_ ids: Set<String>) {
         let pausable = ids.filter { items[$0]?.canPause == true }
         guard !pausable.isEmpty else { return }
         for id in pausable {
@@ -207,15 +202,11 @@ public actor DownloadEngine {
         publish()
     }
 
-    public func resume(_ id: String) {
-        resume(Set([id]))
-    }
-
     public func resumeAll() {
         resume(Set(order))
     }
 
-    private func resume(_ ids: Set<String>) {
+    public func resume(_ ids: Set<String>) {
         let paused = ids.filter { items[$0]?.status == .paused }
         guard !paused.isEmpty else { return }
         for id in paused { items[id]?.status = states[id] == nil ? .queued : .downloading }
@@ -224,11 +215,15 @@ public actor DownloadEngine {
         pump()
     }
 
-    public func retry(_ id: String) {
-        guard var item = items[id], item.canRetry else { return }
-        item.reset(to: .queued)
-        items[id] = item
-        persist([id])
+    public func retryAll() {
+        retry(Set(order))
+    }
+
+    public func retry(_ ids: Set<String>) {
+        let failed = ids.filter { items[$0]?.canRetry == true }
+        guard !failed.isEmpty else { return }
+        for id in failed { items[id]?.reset(to: .queued) }
+        persist(failed)
         publish()
         pump()
     }
@@ -604,10 +599,7 @@ public actor DownloadEngine {
 
     /// Restores the queue without starting it, as deemix does. Anything unfinished comes
     /// back paused, so it reads as waiting on the user and Resume picks it up.
-    public func restore() {
-        items.removeAll()
-        order.removeAll()
-
+    private func restore() {
         let decoder = JSONDecoder()
         guard let orderFile, let data = try? Data(contentsOf: orderFile),
             let saved = try? decoder.decode([String].self, from: data)
@@ -621,6 +613,5 @@ public actor DownloadEngine {
             items[id] = item
             order.append(id)
         }
-        publish()
     }
 }

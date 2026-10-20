@@ -80,7 +80,7 @@ final class AppModel {
         // Here rather than when a window appears: a window reopened from the Dock would sign in
         // again and start a second engine on the same queue.
         Task {
-            if let stored = credentials.arl() { await signIn(arl: stored, remember: false) }
+            if let stored = await credentials.arl() { await signIn(arl: stored, remember: false) }
             isRestoring = false
         }
     }
@@ -95,7 +95,7 @@ final class AppModel {
         signInState = .signingIn
         do {
             let user = try await session.login(arl: arl)
-            if remember { try? credentials.save(arl: arl) }
+            if remember { try? await credentials.save(arl: arl) }
             signInState = .signedIn(user)
             await startEngine()
         } catch {
@@ -110,14 +110,17 @@ final class AppModel {
         engine = nil
         queue = []
         cache.invalidate()
-        credentials.clear()
-        Task { await session.logout() }
         signInState = .signedOut
+        Task { await session.logout() }
+        Task {
+            do { try await credentials.clear() } catch {
+                show(Toast(message: "Couldn't forget the sign-in: \(error.localizedDescription)", kind: .failure))
+            }
+        }
     }
 
     private func startEngine() async {
-        let engine = DownloadEngine(session: session, settings: settings, queueDirectory: paths.queueDirectory)
-        await engine.restore()
+        let engine = await DownloadEngine(session: session, settings: settings, queueDirectory: paths.queueDirectory)
         self.engine = engine
         queueObserver?.cancel()
         queueObserver = Task { [weak self] in
@@ -185,11 +188,12 @@ final class AppModel {
         }
     }
 
-    func pause(_ id: String) { Task { await engine?.pause(id) } }
-    func resume(_ id: String) { Task { await engine?.resume(id) } }
-    func cancel(_ id: String) { Task { await engine?.cancel(id) } }
-    func remove(_ id: String) { Task { await engine?.remove(id) } }
-    func retry(_ id: String) { Task { await engine?.retry(id) } }
+    func pause(_ id: String) { Task { await engine?.pause([id]) } }
+    func resume(_ id: String) { Task { await engine?.resume([id]) } }
+    func cancel(_ id: String) { Task { await engine?.cancel([id]) } }
+    func remove(_ id: String) { Task { await engine?.remove([id]) } }
+    func retry(_ id: String) { Task { await engine?.retry([id]) } }
+    func retryAll() { Task { await engine?.retryAll() } }
     func pauseAll() { Task { await engine?.pauseAll() } }
     func cancelAll() { Task { await engine?.cancelAll() } }
     func resumeAll() { Task { await engine?.resumeAll() } }

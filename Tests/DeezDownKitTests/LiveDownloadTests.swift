@@ -2,7 +2,6 @@ import Foundation
 import Testing
 @testable import DeezDownKit
 
-/// Runs one of Homebrew's ffmpeg tools and returns everything it printed.
 @discardableResult
 private func ffmpeg(_ tool: String, _ arguments: String...) throws -> String {
     let process = Process()

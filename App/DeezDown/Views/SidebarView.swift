@@ -17,7 +17,6 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .tint(.brand)
         .safeAreaInset(edge: .bottom) { account }
     }
 

@@ -169,7 +169,6 @@ public struct MediaResolver: Sendable {
         return found
     }
 
-    /// Last resort: ask Deezer to find the same song by its metadata.
     private func searchReplacements(_ tracks: [Track]) async -> [Track?] {
         await tracks.concurrentMap { [session] track in
             guard

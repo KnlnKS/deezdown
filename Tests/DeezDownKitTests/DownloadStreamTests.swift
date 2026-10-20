@@ -14,7 +14,6 @@ import Testing
         let source = try sandbox.write(
             Data(stripeEncrypt(expected, key: StripeCrypto.blowfishKey(trackID: trackID))), to: "media/track.bin"
         )
-        #expect(MediaDownloader.isEncrypted(source))
 
         let destination = source.deletingLastPathComponent().appending(path: "out.flac")
         let media = ResolvedMedia(

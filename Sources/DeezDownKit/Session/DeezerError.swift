@@ -13,7 +13,7 @@ extension DeezerError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .notLoggedIn: "Not signed in to Deezer."
-        case .invalidARL: "That ARL is not valid or has expired."
+        case .invalidARL: "Deezer didn't accept the sign-in. It may have expired."
         case .gateway(let detail): "Deezer rejected the request: \(detail)"
         case .publicAPI(let code, let message): "Deezer API error \(code): \(message)"
         case .http(let status): "Deezer returned HTTP \(status)."

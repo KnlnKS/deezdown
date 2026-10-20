@@ -19,7 +19,6 @@ struct CardDownloadButton: View {
                 .background(Color.brand, in: Circle())
                 .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
         }
-        .buttonStyle(.plain)
         .pressable()
         .opacity(isVisible ? 1 : 0)
         .scaleEffect(isVisible || reduceMotion ? 1 : 0.6)

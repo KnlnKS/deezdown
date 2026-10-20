@@ -53,9 +53,7 @@ struct DownloadCommands: Commands {
 
             Divider()
 
-            Button("Retry Failed") {
-                for item in model.queue where item.canRetry { model.retry(item.id) }
-            }
+            Button("Retry Failed") { model.retryAll() }
             .keyboardShortcut("r", modifiers: [.command, .shift])
             .disabled(!model.summary.canRetry)
 

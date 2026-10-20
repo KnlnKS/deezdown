@@ -19,54 +19,47 @@ struct GlobalOptions: ParsableArguments {
 
     var paths: AppPaths { AppPaths(portable: portable) }
 
-    /// Signs in with the ARL given, else the stored one, else one typed at the terminal. An ARL
-    /// that wasn't stored is remembered once it works.
+    /// Signs in with the ARL given, remembering it once it works, else with the stored one.
     func signIn(arl given: String?) async throws -> (DeezerSession, DeezerUser) {
         let credentials = CredentialStore(paths: paths)
         let session = DeezerSession()
-        if given == nil, let stored = credentials.arl(), let user = try? await session.login(arl: stored) {
+        if let given {
+            let user = try await session.login(arl: given)
+            try await credentials.save(arl: given)
             return (session, user)
         }
-        let arl = try given ?? Self.typedARL()
-        let user = try await session.login(arl: arl)
-        try credentials.save(arl: arl)
-        return (session, user)
-    }
-
-    private static func typedARL() throws -> String {
-        guard isatty(FileHandle.standardInput.fileDescriptor) == 1 else {
-            printError("Not signed in. Run `deezdown login --arl <ARL>`, or run deezdown from a terminal to be prompted.")
+        guard let stored = await credentials.arl() else {
+            printError("Not signed in. Run `deezdown login` first.")
             throw ExitCode.failure
         }
-        printError("Enter your ARL: ", terminator: "")
-        guard let typed = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines), !typed.isEmpty else {
-            throw ValidationError("No ARL entered.")
-        }
-        return typed
+        return (session, try await session.login(arl: stored))
     }
 }
 
 struct Login: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Store a Deezer ARL for future runs.")
+    static let configuration = CommandConfiguration(abstract: "Sign in to Deezer for future runs.")
 
     @OptionGroup var options: GlobalOptions
 
-    @Option(name: .long, help: "The ARL cookie value. Omit to be prompted.")
+    @Flag var method: SignInPage.Method = .email
+
+    @Option(name: .long, help: "Sign in with this ARL cookie value instead.")
     var arl: String?
 
     func run() async throws {
+        let arl = if let arl { arl } else { try await SignInPage.run(method) }
         let (_, user) = try await options.signIn(arl: arl)
         print("Signed in as \(user.name) (\(user.country), \(user.plan.lowercased())).")
     }
 }
 
-struct Logout: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Forget the stored Deezer ARL.")
+struct Logout: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Forget the stored Deezer sign-in.")
 
     @OptionGroup var options: GlobalOptions
 
-    func run() {
-        CredentialStore(paths: options.paths).clear()
+    func run() async throws {
+        try await CredentialStore(paths: options.paths).clear()
         print("Signed out.")
     }
 }
@@ -161,7 +154,7 @@ struct Download: AsyncParsableCommand {
         if let concurrency { settings.queueConcurrency = concurrency }
 
         let format = bitrate.flatMap(TrackFormat.parse)
-        let engine = DownloadEngine(session: session, settings: settings)
+        let engine = await DownloadEngine(session: session, settings: settings)
 
         // As in deemix, a file stands for the links written in it.
         let listed = try links.flatMap { argument in
@@ -191,6 +184,6 @@ struct Download: AsyncParsableCommand {
 }
 
 /// Kept off standard output, which may be piped.
-func printError(_ message: String, terminator: String = "\n") {
-    FileHandle.standardError.write(Data((message + terminator).utf8))
+func printError(_ message: String) {
+    FileHandle.standardError.write(Data((message + "\n").utf8))
 }

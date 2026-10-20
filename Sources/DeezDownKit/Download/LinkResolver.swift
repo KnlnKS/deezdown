@@ -125,12 +125,4 @@ public struct LinkResolver: Sendable {
             return track
         }
     }
-
-    /// The albums an artist's tab covers, as the discography already describes them. One
-    /// request, and enough to name a queue entry — reading each tracklist is the queue's job.
-    public func artistAlbums(_ id: String, tab: ArtistTab) async throws -> [AlbumSummary] {
-        let albums = ArtistTab.sorting(try await session.artistDiscography(id: id), artistID: id)[tab] ?? []
-        guard !albums.isEmpty else { throw DownloadFailure(.noReleases(tab)) }
-        return albums
-    }
 }

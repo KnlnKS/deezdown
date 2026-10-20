@@ -4,12 +4,7 @@ public struct AppPaths: Sendable {
     public let configDirectory: URL
 
     public var settingsFile: URL { configDirectory.appending(path: "config.json") }
-    public var loginFile: URL { configDirectory.appending(path: "login.json") }
     public var queueDirectory: URL { configDirectory.appending(path: "queue") }
-
-    public func createConfigDirectory() throws {
-        try FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)
-    }
 }
 
 extension AppPaths {

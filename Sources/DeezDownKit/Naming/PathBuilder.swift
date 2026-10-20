@@ -19,10 +19,6 @@ struct DownloadPaths: Sendable, Equatable {
 public struct PathBuilder: Sendable {
     let settings: DownloadSettings
 
-    init(settings: DownloadSettings) {
-        self.settings = settings
-    }
-
     func trackVariables(_ track: Track, _ context: DownloadContext) -> TemplateVariables {
         let date = track.date ?? track.album.date
         let featured = track.featuredArtistsString

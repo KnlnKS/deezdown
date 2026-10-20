@@ -104,7 +104,6 @@ struct TrackRow: View {
                         .opacity(showsArtwork ? (hovering || isPlaying ? 1 : 0) : 1)
                 }
             }
-            .buttonStyle(.plain)
             .pressable()
             .frame(width: size, height: size)
             .help(isPlaying ? "Stop preview" : "Play a 30 second preview")
