@@ -30,16 +30,16 @@ struct DownloadsScreen: View {
             }
             ToolbarItem {
                 if model.summary.canPause {
-                    Button("Pause All", systemImage: "pause.circle") { model.pauseAll() }
+                    Button("Pause All", systemImage: "pause.circle") { model.pause() }
                         .help("Pause every download")
                 } else {
-                    Button("Resume All", systemImage: "play.circle") { model.resumeAll() }
+                    Button("Resume All", systemImage: "play.circle") { model.resume() }
                         .disabled(!model.summary.canResume)
                         .help("Resume every paused download")
                 }
             }
             ToolbarItem {
-                Button("Cancel All", systemImage: "xmark.circle") { model.cancelAll() }
+                Button("Cancel All", systemImage: "xmark.circle") { model.cancel() }
                     .disabled(model.summary.active == 0)
                     .help("Cancel everything in the queue")
             }

@@ -53,7 +53,7 @@ struct DownloadCommands: Commands {
 
             Divider()
 
-            Button("Retry Failed") { model.retryAll() }
+            Button("Retry Failed") { model.retry() }
             .keyboardShortcut("r", modifiers: [.command, .shift])
             .disabled(!model.summary.canRetry)
 
@@ -61,13 +61,13 @@ struct DownloadCommands: Commands {
                 .keyboardShortcut(.delete, modifiers: [.command, .shift])
                 .disabled(!model.summary.canClear)
 
-            Button("Pause All") { model.pauseAll() }
+            Button("Pause All") { model.pause() }
                 .disabled(!model.summary.canPause)
 
-            Button("Resume All") { model.resumeAll() }
+            Button("Resume All") { model.resume() }
                 .disabled(!model.summary.canResume)
 
-            Button("Cancel All") { model.cancelAll() }
+            Button("Cancel All") { model.cancel() }
                 .disabled(model.summary.active == 0)
 
             Divider()

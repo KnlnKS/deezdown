@@ -67,7 +67,7 @@ final class LiveEngine {
     @Test func `the queue survives a restart`() async throws {
         let engine = try await engine()
         try await engine.enqueue([.album("302127")])
-        await engine.cancelAll()
+        await engine.cancel()
 
         let restored = try await self.engine()
         let queue = await restored.queue

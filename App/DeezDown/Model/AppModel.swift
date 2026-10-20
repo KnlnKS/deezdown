@@ -106,7 +106,7 @@ final class AppModel {
     func signOut() {
         queueObserver?.cancel()
         queueObserver = nil
-        if let engine { Task { await engine.cancelAll() } }
+        if let engine { Task { await engine.cancel() } }
         engine = nil
         queue = []
         cache.invalidate()
@@ -188,15 +188,12 @@ final class AppModel {
         }
     }
 
-    func pause(_ id: String) { Task { await engine?.pause([id]) } }
-    func resume(_ id: String) { Task { await engine?.resume([id]) } }
-    func cancel(_ id: String) { Task { await engine?.cancel([id]) } }
+    /// Each acts on one download, or on every download given none.
+    func pause(_ id: String? = nil) { Task { await engine?.pause(id.map { [$0] }) } }
+    func resume(_ id: String? = nil) { Task { await engine?.resume(id.map { [$0] }) } }
+    func cancel(_ id: String? = nil) { Task { await engine?.cancel(id.map { [$0] }) } }
+    func retry(_ id: String? = nil) { Task { await engine?.retry(id.map { [$0] }) } }
     func remove(_ id: String) { Task { await engine?.remove([id]) } }
-    func retry(_ id: String) { Task { await engine?.retry([id]) } }
-    func retryAll() { Task { await engine?.retryAll() } }
-    func pauseAll() { Task { await engine?.pauseAll() } }
-    func cancelAll() { Task { await engine?.cancelAll() } }
-    func resumeAll() { Task { await engine?.resumeAll() } }
     func clearFinished() { Task { await engine?.clearFinished() } }
 
     func revealDownloads() {

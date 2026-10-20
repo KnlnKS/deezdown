@@ -137,12 +137,9 @@ public actor DownloadEngine {
         }
     }
 
-    public func cancelAll() {
-        cancel(Set(order))
-    }
-
-    public func cancel(_ ids: Set<String>) {
-        let unfinished = ids.filter { items[$0]?.status.isFinished == false }
+    /// Cancelling, pausing, resuming and retrying act on `ids`, or on the whole queue given none.
+    public func cancel(_ ids: Set<String>? = nil) {
+        let unfinished = (ids ?? Set(order)).filter { items[$0]?.status.isFinished == false }
         guard !unfinished.isEmpty else { return }
         stopWork(for: unfinished)
         for id in unfinished { items[id]?.status = .canceled }
@@ -181,14 +178,10 @@ public actor DownloadEngine {
         publish()
     }
 
-    public func pauseAll() {
-        pause(Set(order))
-    }
-
     /// Pausing stops the tracks in flight too, which start over on resume: a whole album is often
     /// in flight at once, so letting them finish would not pause it.
-    public func pause(_ ids: Set<String>) {
-        let pausable = ids.filter { items[$0]?.canPause == true }
+    public func pause(_ ids: Set<String>? = nil) {
+        let pausable = (ids ?? Set(order)).filter { items[$0]?.canPause == true }
         guard !pausable.isEmpty else { return }
         for id in pausable {
             transfers[id]?.values.forEach { $0.cancel() }
@@ -202,12 +195,8 @@ public actor DownloadEngine {
         publish()
     }
 
-    public func resumeAll() {
-        resume(Set(order))
-    }
-
-    public func resume(_ ids: Set<String>) {
-        let paused = ids.filter { items[$0]?.status == .paused }
+    public func resume(_ ids: Set<String>? = nil) {
+        let paused = (ids ?? Set(order)).filter { items[$0]?.status == .paused }
         guard !paused.isEmpty else { return }
         for id in paused { items[id]?.status = states[id] == nil ? .queued : .downloading }
         persist(paused)
@@ -215,12 +204,8 @@ public actor DownloadEngine {
         pump()
     }
 
-    public func retryAll() {
-        retry(Set(order))
-    }
-
-    public func retry(_ ids: Set<String>) {
-        let failed = ids.filter { items[$0]?.canRetry == true }
+    public func retry(_ ids: Set<String>? = nil) {
+        let failed = (ids ?? Set(order)).filter { items[$0]?.canRetry == true }
         guard !failed.isEmpty else { return }
         for id in failed { items[id]?.reset(to: .queued) }
         persist(failed)
