@@ -1,6 +1,6 @@
 import Foundation
 
-public enum DeezerError: Error, Sendable {
+enum DeezerError: Error, Sendable {
     case notLoggedIn
     case invalidARL
     case gateway(String)

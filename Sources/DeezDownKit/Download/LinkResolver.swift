@@ -1,19 +1,19 @@
 import Foundation
 
-public struct ResolvedCollection: Sendable {
-    public var title: String
-    public var subtitle: String
-    public var cover: Artwork
-    public var tracks: [Track]
-    public var playlist: Playlist?
-    public var rootArtist: ArtistRef?
-    public var isSingleTrack = false
+struct ResolvedCollection: Sendable {
+    var title: String
+    var subtitle: String
+    var cover: Artwork
+    var tracks: [Track]
+    var playlist: Playlist?
+    var rootArtist: ArtistRef?
+    var isSingleTrack = false
 }
 
-public struct LinkResolver: Sendable {
+struct LinkResolver: Sendable {
     let session: DeezerSession
 
-    public func resolve(_ link: DeezerLink) async throws -> ResolvedCollection {
+    func resolve(_ link: DeezerLink) async throws -> ResolvedCollection {
         switch link {
         case .track(let id): try await resolveTrack(id)
         case .album(let id): try await resolveAlbum(id)

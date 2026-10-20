@@ -2,31 +2,29 @@ import CommonCrypto
 import CryptoKit
 import Foundation
 
-public enum StripeCrypto {
-    public static let blockSize = 2048
-    public static let groupSize = 6144
+enum StripeCrypto {
+    static let blockSize = 2048
+    static let groupSize = 6144
 
     static let secret = Array("g4el58wc0zvf9na1".utf8)
     static let iv: [UInt8] = [0, 1, 2, 3, 4, 5, 6, 7]
     static let hexDigits = Array("0123456789abcdef".utf8)
 
-    public static func blowfishKey(trackID: String) -> [UInt8] {
+    static func blowfishKey(trackID: String) -> [UInt8] {
         let digest = Insecure.MD5.hash(data: Data(trackID.utf8))
         let hex = digest.flatMap { [hexDigits[Int($0 >> 4)], hexDigits[Int($0 & 0x0F)]] }
         return (0..<16).map { hex[$0] ^ hex[$0 + 16] ^ secret[$0] }
     }
 }
 
-public struct StripeDecryptError: Error, Sendable {
-    public let status: Int32
-}
+struct StripeDecryptError: Error {}
 
-public final class StripeDecryptor {
+final class StripeDecryptor {
     private let cryptor: CCCryptorRef
     private var pending: [UInt8] = []
     private var sawFirstBytes = false
 
-    public init(trackID: String) throws {
+    init(trackID: String) throws {
         let key = StripeCrypto.blowfishKey(trackID: trackID)
         var ref: CCCryptorRef?
         let status = key.withUnsafeBytes { keyBuf in
@@ -45,7 +43,7 @@ public final class StripeDecryptor {
                 )
             }
         }
-        guard status == kCCSuccess, let ref else { throw StripeDecryptError(status: status) }
+        guard status == kCCSuccess, let ref else { throw StripeDecryptError() }
         cryptor = ref
         pending.reserveCapacity(StripeCrypto.groupSize)
     }
@@ -54,7 +52,7 @@ public final class StripeDecryptor {
         CCCryptorRelease(cryptor)
     }
 
-    public func consume(_ incoming: some Sequence<UInt8>) throws -> [UInt8] {
+    func consume(_ incoming: some Sequence<UInt8>) throws -> [UInt8] {
         pending.append(contentsOf: incoming)
         guard pending.count >= StripeCrypto.groupSize else { return [] }
 
@@ -69,7 +67,7 @@ public final class StripeDecryptor {
         return depadIfNeeded(out)
     }
 
-    public func finish() throws -> [UInt8] {
+    func finish() throws -> [UInt8] {
         var out = pending
         pending.removeAll(keepingCapacity: false)
         if out.count >= StripeCrypto.blockSize {
@@ -81,7 +79,7 @@ public final class StripeDecryptor {
     /// CommonCrypto deciphers in place, so the block never leaves the buffer.
     private func decryptBlock(in buffer: inout [UInt8], at offset: Int) throws {
         var status = StripeCrypto.iv.withUnsafeBytes { CCCryptorReset(cryptor, $0.baseAddress) }
-        guard status == kCCSuccess else { throw StripeDecryptError(status: status) }
+        guard status == kCCSuccess else { throw StripeDecryptError() }
 
         var moved = 0
         status = buffer.withUnsafeMutableBytes { bytes in
@@ -89,7 +87,7 @@ public final class StripeDecryptor {
             return CCCryptorUpdate(cryptor, block, StripeCrypto.blockSize, block, StripeCrypto.blockSize, &moved)
         }
         guard status == kCCSuccess, moved == StripeCrypto.blockSize else {
-            throw StripeDecryptError(status: status)
+            throw StripeDecryptError()
         }
     }
 

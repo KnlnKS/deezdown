@@ -1,17 +1,17 @@
 import Foundation
 
 /// Fetches each picture once and hands the same bytes to every track that asks while it is fresh.
-public actor ArtworkStore {
+actor ArtworkStore {
     private let urlSession: URLSession
     private var cache: [URL: Data] = [:]
     private var cachedOrder: [URL] = []
     private var inFlight: [URL: Task<Data?, Never>] = [:]
 
-    public init() {
+    init() {
         urlSession = URLSession(configuration: .deezer(connectionsPerHost: 6, timeout: 20))
     }
 
-    public func image(_ picture: Artwork, size: Int, format: ImageFormat) async -> Data? {
+    func image(_ picture: Artwork, size: Int, format: ImageFormat) async -> Data? {
         guard let url = picture.url(size: size, format: format) else { return nil }
         if let cached = cache[url] { return cached }
         if let running = inFlight[url] { return await running.value }

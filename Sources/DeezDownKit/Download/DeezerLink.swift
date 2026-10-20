@@ -109,12 +109,12 @@ public enum DeezerLink: Sendable, Equatable, Hashable, Codable {
     }
 }
 
-public enum LinkParseError: LocalizedError, Sendable, Equatable {
+enum LinkParseError: LocalizedError, Sendable, Equatable {
     case notRecognized(String)
     case notSupported(String)
     case invalidID(String)
 
-    public var errorDescription: String? {
+    var errorDescription: String? {
         switch self {
         case .notRecognized: "That doesn't look like a Deezer link."
         case .notSupported: "That kind of Deezer link isn't supported."

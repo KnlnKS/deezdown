@@ -1,28 +1,28 @@
 import Foundation
 
-public struct ResolvedMedia: Sendable {
-    public var track: Track
-    public var format: TrackFormat
-    public var urls: [URL]
+struct ResolvedMedia: Sendable {
+    var track: Track
+    var format: TrackFormat
+    var urls: [URL]
 }
 
 /// Turns tracks into downloadable CDN URLs, batching Deezer's `get_url` up to its 100-token
 /// ceiling and walking the quality ladder a whole tier at a time rather than a track at a time.
-public struct MediaResolver: Sendable {
-    public static let batchLimit = 100
+struct MediaResolver: Sendable {
+    static let batchLimit = 100
 
     let session: DeezerSession
     let settings: DownloadSettings
 
     /// deemix's order: the preferred family from the requested quality down, then its
     /// catch-all MP3 for anything that offers one.
-    public func ladder(for preferred: TrackFormat) -> [TrackFormat] {
+    func ladder(for preferred: TrackFormat) -> [TrackFormat] {
         guard settings.fallbackBitrate else { return [preferred] }
         if preferred.isSpatial { return [.mp4ra3, .mp4ra2, .mp4ra1].filter { $0 <= preferred } }
         return [.flac, .mp3_320, .mp3_128].filter { $0 <= preferred } + [.default]
     }
 
-    public func resolve(_ tracks: [Track], format preferred: TrackFormat) async throws
+    func resolve(_ tracks: [Track], format preferred: TrackFormat) async throws
         -> [Result<ResolvedMedia, DownloadFailure>]
     {
         let pending = try await refreshingExpiredTokens(tracks)

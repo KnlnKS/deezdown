@@ -1,11 +1,11 @@
 import Foundation
 
-public enum Tagger {
+enum Tagger {
     static let involvedRoles = ["author", "engineer", "mixer", "producer", "writer"]
 
     /// Tagging rewrites the whole file, so it runs off the caller's actor.
     @concurrent
-    public static func tag(
+    static func tag(
         _ track: Track,
         format: TrackFormat,
         at url: URL,

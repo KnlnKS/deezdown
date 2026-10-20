@@ -1,10 +1,10 @@
 import Foundation
 
-public final class MediaDownloader: Sendable {
+final class MediaDownloader: Sendable {
     private let urlSession: URLSession
     private let bodies: ResponseBodies
 
-    public init() {
+    init() {
         let configuration = URLSessionConfiguration.deezer(connectionsPerHost: 12, timeout: 20)
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         let bodies = ResponseBodies()
@@ -23,7 +23,7 @@ public final class MediaDownloader: Sendable {
     }
 
     @discardableResult
-    public func download(
+    func download(
         _ media: ResolvedMedia,
         to destination: URL,
         onProgress: (@Sendable (Int64, Int64) -> Void)? = nil

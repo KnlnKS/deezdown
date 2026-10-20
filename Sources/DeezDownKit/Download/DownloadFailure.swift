@@ -1,7 +1,7 @@
 import Foundation
 
-public struct DownloadFailure: LocalizedError, Sendable, Equatable {
-    public enum Reason: Sendable, Equatable {
+struct DownloadFailure: LocalizedError, Sendable, Equatable {
+    enum Reason: Sendable, Equatable {
         case notOnDeezer
         case notEncoded
         case wrongBitrate
@@ -17,10 +17,10 @@ public struct DownloadFailure: LocalizedError, Sendable, Equatable {
         case tagging(String)
     }
 
-    public var reason: Reason
-    public var exhaustedAlternatives: Bool
+    var reason: Reason
+    var exhaustedAlternatives: Bool
 
-    public init(_ reason: Reason, exhaustedAlternatives: Bool = false) {
+    init(_ reason: Reason, exhaustedAlternatives: Bool = false) {
         self.reason = reason
         self.exhaustedAlternatives = exhaustedAlternatives
     }
@@ -38,7 +38,7 @@ public struct DownloadFailure: LocalizedError, Sendable, Equatable {
         self.init(full ? .noSpaceLeft : .network(error.localizedDescription))
     }
 
-    public var errorDescription: String? {
+    var errorDescription: String? {
         let base =
             switch reason {
             case .notOnDeezer: "Track not available on Deezer"

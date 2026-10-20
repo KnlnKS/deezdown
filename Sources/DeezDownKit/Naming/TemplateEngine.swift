@@ -1,16 +1,16 @@
 import Foundation
 
 /// Kept in the order Settings lists them.
-public typealias TemplateVariables = KeyValuePairs<String, String>
+typealias TemplateVariables = KeyValuePairs<String, String>
 
-public enum TemplateEngine {
+enum TemplateEngine {
     /// deemix drops one leading space with these when they render empty, so titles don't
     /// end up with a double space where the feature or advisory marker would have been.
     static let spaceEating: Set<String> = ["featartists", "explicit"]
 
     /// One pass over the template, so a value that contains a token is never substituted in
     /// turn. Only the values the template uses are escaped.
-    public static func render(
+    static func render(
         _ template: String, _ variables: TemplateVariables, escape: (String) -> String = { $0 }
     ) -> String {
         var output = ""
