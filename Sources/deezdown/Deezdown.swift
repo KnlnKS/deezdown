@@ -7,7 +7,7 @@ struct Deezdown: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "deezdown",
         abstract: "Download music from Deezer.",
-        version: DeezDown.version,
+        version: "0.1.0",
         subcommands: [Download.self, Search.self, Login.self, Logout.self, Config.self],
         defaultSubcommand: Download.self
     )

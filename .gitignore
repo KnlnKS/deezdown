@@ -4,4 +4,3 @@
 DerivedData/
 *.xcodeproj
 *.xcworkspace
-!App/project.yml
